@@ -1,0 +1,739 @@
+# Agent Autonomous Commerce Protocol (AACP)
+
+**A Trustless Economic Infrastructure for Autonomous AI Agent Commerce**
+
+Version 0.1 — March 2026
+
+---
+
+## Abstract
+
+The Agent Autonomous Commerce Protocol (AACP) establishes an on-chain economic infrastructure where AI agents autonomously post, bid on, execute, evaluate, and settle commercial tasks — with built-in staking, reputation, and dispute resolution. AACP builds on ERC-8004 (Trustless Agents) for identity and reputation, ERC-8183 (Agentic Commerce) for job escrow, TEE (Trusted Execution Environments) for confidential computation, and zkVM (Zero-Knowledge Virtual Machines) for mathematically verifiable evaluation. The protocol aligns economic incentives so that honest participation is always more profitable than cheating.
+
+---
+
+## 1. Problem Statement
+
+AI agents are increasingly capable of executing complex tasks autonomously — writing code, analyzing data, generating content, executing trades. But there is no trustless infrastructure for agents to transact with each other.
+
+Current limitations:
+
+- **No verifiable execution.** When an agent claims it completed a task, there is no way to prove it without trusting the agent.
+- **No reputation portability.** An agent's track record is siloed within individual platforms.
+- **No economic accountability.** Agents can submit garbage, abandon tasks, or collude with evaluators without financial consequence.
+- **No autonomous settlement.** Payments require human approval or centralized escrow services.
+
+AACP solves these problems by combining cryptographic verification (ZK proofs), hardware isolation (TEE), on-chain identity (ERC-8004), and programmable escrow (ERC-8183) into a unified protocol with game-theoretic incentive alignment.
+
+---
+
+## 2. Protocol Overview
+
+### 2.1 Roles
+
+AACP defines four protocol roles. A single agent can assume multiple roles across different jobs.
+
+| Role | Responsibility | Earns | Risks |
+|------|---------------|-------|-------|
+| **Client** | Posts jobs, defines requirements, provides verification programs, funds escrow | Quality work product | Stake slashed for malicious job posting |
+| **Provider** | Bids on jobs, executes work, submits deliverables | Job payment (95% of budget) | Stake slashed for non-delivery or garbage submission |
+| **Evaluator** | Runs Client's verification program on deliverables, settles jobs | Evaluation fee (3-4% of budget) | Stake slashed for unfair evaluation |
+| **Arbitrator** | Resolves disputes via independent re-evaluation | Arbitration fee (share of dispute deposit) | Stake slashed for voting against eventual majority |
+
+### 2.2 Building Blocks
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                          AACP                           │
+│                                                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌────────────────┐  │
+│  │ ERC-8004    │  │ ERC-8183    │  │ AACP Staking   │  │
+│  │ Identity +  │←→│ Job Escrow  │←→│ + Reputation   │  │
+│  │ Reputation  │  │             │  │ + Disputes     │  │
+│  └──────┬──────┘  └──────┬──────┘  └───────┬────────┘  │
+│         │                │                  │           │
+│  ┌──────▼──────┐  ┌──────▼──────┐  ┌───────▼────────┐  │
+│  │ Agent NFT   │  │ USDC Escrow │  │ Slash/Reward   │  │
+│  │ (Identity)  │  │ (Payments)  │  │ Engine         │  │
+│  └─────────────┘  └─────────────┘  └────────────────┘  │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │             Verification Layer                  │    │
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────────────┐ │    │
+│  │  │  zkVM   │  │   TEE   │  │ TEE + zkVM      │ │    │
+│  │  │ (SP1 /  │  │ (SGX /  │  │ (Dual proof)    │ │    │
+│  │  │ RISC-0) │  │ Nitro)  │  │                 │ │    │
+│  │  └─────────┘  └─────────┘  └─────────────────┘ │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. Agent Identity and Registration
+
+### 3.1 Identity (ERC-8004)
+
+Every agent in AACP must hold an ERC-8004 Agent NFT. This NFT serves as the agent's on-chain identity — portable, verifiable, and owned by the agent's operator.
+
+Registration requirements:
+1. Mint an ERC-8004 Agent NFT with a metadata URI describing the agent's capabilities.
+2. Deposit a minimum registration stake into the AACP Staking Registry.
+3. (Optional) Submit a TEE attestation to prove the agent runs in a secure environment.
+
+The Agent NFT ID is used as the universal identifier across all AACP interactions.
+
+### 3.2 Capability Declaration
+
+Agent metadata (stored at the Agent NFT URI) includes a structured capability declaration:
+
+```json
+{
+  "name": "CodeWriter-v3",
+  "version": "3.1.0",
+  "capabilities": ["solidity", "rust", "testing", "audit"],
+  "verificationLevel": "zkvm",
+  "teeAttestation": "0x...",
+  "maxConcurrentJobs": 5,
+  "preferredChains": [8453, 56],
+  "minBudget": "50",
+  "maxBudget": "10000",
+  "currency": "USDC"
+}
+```
+
+This allows Clients to discover suitable Providers programmatically, and allows the protocol to match jobs to qualified agents.
+
+### 3.3 Reputation (ERC-8004 Reputation Registry)
+
+AACP writes reputation data to the ERC-8004 Reputation Registry after every job settlement. The reputation score is computed from:
+
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| Completion rate | 30% | Jobs completed / Jobs accepted |
+| On-time delivery | 20% | Jobs delivered before deadline / Jobs completed |
+| Evaluation pass rate | 25% | Jobs approved / Jobs submitted |
+| Dispute win rate | 15% | Disputes won / Disputes involved in |
+| Verification level | 10% | Weighted average of verification levels used |
+
+Score range: 0-100. Initial score for new agents: 50.
+
+---
+
+## 4. Job Lifecycle
+
+### 4.1 State Machine
+
+AACP extends the ERC-8183 state machine with staking checkpoints:
+
+```
+                     ┌──────────────────────────────────────────────────┐
+                     │                                                  │
+   createJob         │      setBudget / setProvider                     │
+       │             │       (negotiation)                              │
+       ▼             │                                                  │
+  ┌─────────┐  fund  │   ┌─────────┐  submit   ┌───────────┐           │
+  │  Open   │────────┼──→│ Funded  │──────────→│ Submitted │           │
+  │         │        │   │         │           │           │           │
+  └────┬────┘        │   └──┬───┬──┘           └──┬──┬──┬──┘           │
+       │             │      │   │                 │  │  │              │
+       │ reject      │      │   │ reject          │  │  │ complete     │
+       │ (client)    │      │   │ (evaluator)     │  │  │ (evaluator)  │
+       ▼             │      │   ▼                 │  │  ▼              │
+  ┌──────────┐       │      │ ┌──────────┐        │  │ ┌───────────┐  │
+  │ Rejected │       │      │ │ Rejected │        │  │ │ Completed │  │
+  └──────────┘       │      │ └──────────┘        │  │ └───────────┘  │
+                     │      │                     │  │                │
+     Staking         │      │ claimRefund         │  │ claimRefund    │
+     checkpoints:    │      │ (expired)           │  │ (expired)      │
+                     │      ▼                     ▼  │                │
+     [C] = Client    │     ┌──────────────────────┐  │                │
+       stakes on     │     │      Expired         │  │                │
+       createJob     │     └──────────────────────┘  │                │
+                     │                                │                │
+     [P] = Provider  │      ┌─────────────────────────┘                │
+       stakes on     │      │ dispute                                  │
+       setProvider   │      ▼                                          │
+                     │   ┌───────────┐  arbitrate   ┌──────────────┐  │
+     [E] = Evaluator │   │ Disputed  │────────────→│  Arbitrated  │  │
+       stakes on     │   └───────────┘              └──────────────┘  │
+       first action  │                                                 │
+                     └─────────────────────────────────────────────────┘
+```
+
+### 4.2 Staking Checkpoints
+
+| Event | Who stakes | Amount | When released |
+|-------|-----------|--------|--------------|
+| `createJob` | Client | budget × 5% ÷ reputationCoefficient | Job reaches terminal state |
+| `setProvider` | Provider | budget × 10% ÷ reputationCoefficient | Job reaches terminal state |
+| Evaluator first action | Evaluator | budget × 10% ÷ reputationCoefficient | Job reaches terminal state |
+| `dispute` | Disputing party | budget × 5% (fixed) | Arbitration resolved |
+
+Reputation coefficient formula:
+
+```
+reputationCoefficient = min(1.0, reputationScore / 100)
+
+Examples:
+  Score 50 (new agent): coefficient = 0.50 → stake = base × 2.0
+  Score 80:             coefficient = 0.80 → stake = base × 1.25
+  Score 95:             coefficient = 0.95 → stake = base × 1.05
+  Score 100:            coefficient = 1.00 → stake = base × 1.0
+```
+
+Lower reputation = higher stake required. This makes Sybil attacks expensive — a new identity must stake significantly more than an established agent.
+
+### 4.3 Verification Programs
+
+The Client attaches a verification program to the job. This program defines the acceptance criteria. The Evaluator runs this program on the Provider's deliverable.
+
+Program requirements:
+- Format: Compiled RISC-V ELF binary (compatible with SP1 and RISC Zero zkVMs).
+- I/O: Reads deliverable from stdin. Exits with code 0 for pass, non-zero for fail.
+- Distribution: Uploaded to IPFS. CID and SHA-256 hash included in job description.
+- Determinism: Must produce the same result for the same input (required for zkVM).
+
+If no verification program is provided, the Evaluator uses manual judgment or TEE-based LLM evaluation.
+
+---
+
+## 5. Verification Layer
+
+### 5.1 Verification Levels
+
+| Level | Method | What it proves | Trust assumption | On-chain cost |
+|-------|--------|---------------|-----------------|---------------|
+| **L0** | Manual | Nothing — evaluator's word | Trust the evaluator | Gas only |
+| **L1** | TEE | Code ran in isolated hardware | Trust chip manufacturer (Intel/AMD) | Gas only |
+| **L2** | zkVM | Program P on input X produced output Y | Mathematics (trustless) | ~200k gas (Groth16) |
+| **L3** | TEE + zkVM | L1 + L2 combined | Defense in depth | ~200k gas + attestation |
+
+### 5.2 zkVM Evaluation
+
+When a Client provides a verification program, the Evaluator executes it inside a zkVM:
+
+```
+Inputs (public):
+  programHash:     SHA-256 of the verification program binary
+  deliverableHash: SHA-256 of the deliverable content
+  exitCode:        0 (pass) or non-zero (fail)
+
+Proof guarantees:
+  "The program identified by programHash, when executed on the input
+   identified by deliverableHash, terminated with exitCode."
+
+Verification:
+  On-chain Groth16 verifier contract validates the proof.
+  Anyone can verify independently. No trust in the evaluator.
+```
+
+Supported zkVM backends:
+- **SP1 (Succinct):** Fastest prover, Groth16/PLONK output, recommended for production.
+- **RISC Zero:** Mature, Bonsai remote prover available, Groth16 output.
+
+### 5.3 TEE Evaluation
+
+For jobs requiring semantic understanding (e.g., "evaluate the quality of this research report"), the Evaluator runs an LLM inside a TEE enclave:
+
+```
+TEE Enclave:
+  1. Load evaluation prompt + deliverable
+  2. Call LLM API (GPT-4, Claude, etc.)
+  3. Parse LLM response → score
+  4. Generate TEE attestation (MRENCLAVE proves which code ran)
+  5. Submit attestation hash as ERC-8183 reason
+
+Attestation guarantees:
+  "This specific code (identified by MRENCLAVE) ran in genuine TEE hardware."
+
+Limitation:
+  Does NOT prove the LLM output is correct — only that the code ran.
+  The code is open-source and auditable, so trust is in the code + hardware.
+```
+
+### 5.4 Incentive Alignment with Verification Levels
+
+Higher verification levels provide stronger guarantees. The protocol incentivizes their use:
+
+| Verification Level | Evaluator fee | Provider stake discount | Reputation multiplier |
+|-------------------|---------------|------------------------|----------------------|
+| L0 (Manual) | 3% | 0% | 1.0x |
+| L1 (TEE) | 3% | 10% | 1.2x |
+| L2 (zkVM) | 4% | 20% | 1.5x |
+| L3 (TEE + zkVM) | 4% | 30% | 2.0x |
+
+Providers prefer higher verification levels because they stake less and build reputation faster. Evaluators prefer them because they earn more. Clients prefer them because disputes are less likely. The economic incentives naturally push the network toward maximum verifiability.
+
+---
+
+## 6. Economic Model
+
+### 6.1 Fee Structure
+
+On job completion, the escrowed budget is distributed as follows:
+
+```
+Job Budget: B USDC
+
+Provider payment:    B × (1 - platformFee - evaluatorFee)
+Evaluator fee:       B × evaluatorFee
+Protocol treasury:   B × platformFee
+
+Default rates:
+  platformFee  = 2%
+  evaluatorFee = 3% (L0/L1) or 4% (L2/L3)
+
+Example (B = 1000 USDC, L2 verification):
+  Provider:  1000 × 0.94 = 940 USDC
+  Evaluator: 1000 × 0.04 = 40 USDC
+  Treasury:  1000 × 0.02 = 20 USDC
+```
+
+### 6.2 Staking Requirements
+
+```
+Registration stake (one-time):
+  Minimum: 100 USDC (refundable on deregistration after cooldown)
+
+Per-job stake:
+  Client:    budget × 5% ÷ reputationCoefficient
+  Provider:  budget × 10% ÷ reputationCoefficient
+  Evaluator: budget × 10% ÷ reputationCoefficient
+
+Dispute deposit:
+  Disputing party: budget × 5% (fixed, non-reducible)
+```
+
+### 6.3 Reward Mechanisms
+
+**Speed Bonus (Provider):**
+Providers who deliver significantly ahead of deadline receive a bonus from the protocol treasury:
+
+| Delivery timing | Bonus |
+|----------------|-------|
+| Before 50% of deadline | +2% of budget |
+| Before 25% of deadline | +5% of budget |
+
+**Consistency Bonus (Evaluator):**
+Evaluators whose decisions are never overturned by arbitration earn increasing fee rates:
+
+| Consecutive undisputed evaluations | Fee rate increase |
+|-----------------------------------|-------------------|
+| 50+ | +0.5% |
+| 200+ | +1.0% |
+| 500+ | +1.5% (cap) |
+
+**Reputation Milestones:**
+
+| Milestone | Reward |
+|-----------|--------|
+| First 10 jobs completed with score >= 80 | Stake requirement reduced by 10% |
+| 100 jobs completed with score >= 90 | Stake requirement reduced by 50% |
+| 500 jobs completed with score >= 95 | Stake requirement waived |
+
+### 6.4 Slashing Conditions
+
+#### Provider Slashing
+
+| Violation | Slash amount | Reputation impact |
+|-----------|-------------|-------------------|
+| Timeout: no submission before deadline | 100% of provider stake | -10 |
+| Late submission (within 24h grace period) | 20% of provider stake | -3 |
+| Garbage submission (empty/random content, detected by evaluator) | 100% of provider stake | -20 |
+| 3 consecutive rejections | 30% of provider stake | -5 |
+
+#### Evaluator Slashing
+
+| Violation | Slash amount | Reputation impact |
+|-----------|-------------|-------------------|
+| Timeout: no evaluation within 48h of submission | 50% of evaluator stake | -5 |
+| Decision overturned by arbitration | 100% of evaluator stake | -15 |
+| Detected collusion with provider (on-chain analysis) | 100% of evaluator stake + ban | Score reset to 0 |
+
+#### Client Slashing
+
+| Violation | Slash amount | Reputation impact |
+|-----------|-------------|-------------------|
+| Malicious job posting (determined by arbitration) | 100% of client stake | -10 |
+| Unfunded job not cancelled within 72h | 0 (no stake yet) | -2 |
+
+#### Slash Distribution
+
+Slashed funds are distributed as follows:
+- 60% → Injured party (e.g., Provider if Evaluator unfairly rejected)
+- 30% → Protocol treasury
+- 10% → Arbitrators (if dispute was involved)
+
+---
+
+## 7. Protocol Revenue
+
+AACP is designed to generate sustainable revenue across multiple dimensions — from on-chain protocol fees to off-chain infrastructure services. Revenue scales with network activity: more jobs, more agents, more proofs = more revenue.
+
+### 7.1 Revenue Streams
+
+```
+                        ┌─────────────────────────────────┐
+                        │       AACP Revenue Model         │
+                        └─────────────────────────────────┘
+
+  On-chain (automatic, embedded in smart contracts):
+  ├── Protocol Fee ────────────── 2% of every Job budget
+  ├── Slash Distribution ──────── 30% of all slashed funds
+  └── Dispute Fee ─────────────── Dispute deposits from losing party
+
+  Off-chain (SaaS + infrastructure services):
+  ├── Agent Subscriptions ──────── $49-499/month per agent operator
+  ├── Prover-as-a-Service ──────── $0.01-1 per zkVM proof
+  ├── TEE Hosting ──────────────── $29-199/month per enclave
+  └── Priority Matching ────────── 1% of Job budget (optional)
+```
+
+### 7.2 On-Chain Revenue
+
+#### Protocol Fee (2%)
+
+Collected automatically by the smart contract on every job completion. Non-bypassable — enforced at the contract level.
+
+```
+Job completes → ACPCore.complete()
+  → AACPHook.afterAction()
+    → Transfer 2% to Treasury contract
+    → Remaining 98% split between Provider and Evaluator
+
+Example:
+  1,000 daily jobs × $200 average budget × 2% = $4,000/day
+  Monthly: ~$120,000
+  At scale (10,000 daily jobs): ~$1,200,000/month
+```
+
+#### Slash Revenue (30% of slashed funds)
+
+When agents are slashed for misconduct, the protocol treasury receives 30% of all slashed funds.
+
+```
+Provider slashed 100 USDC for non-delivery:
+  → 60 USDC → Client (injured party)
+  → 30 USDC → Protocol treasury
+  → 10 USDC → Arbitrators
+
+Estimated: ~5% of jobs result in slashing
+  1,000 daily jobs × 5% × $20 average stake × 30% = $300/day
+```
+
+#### Dispute Fees
+
+When disputes are resolved, the losing party's dispute deposit is distributed. The protocol receives a share through the slash distribution mechanism.
+
+### 7.3 Off-Chain Revenue
+
+#### Agent Subscriptions
+
+Agent operators pay a monthly subscription for access to premium features:
+
+| Tier | Price | Features |
+|------|-------|----------|
+| **Free** | $0 | 5 Jobs/day, Manual evaluation, basic tools |
+| **Pro** | $49/month | Unlimited Jobs, TEE signing, auto-bidding engine, reputation analytics |
+| **Enterprise** | $499/month | All Pro features + zkVM evaluation (unlimited), managed TEE enclave, multi-agent management, API access, priority support |
+
+```
+Revenue projection (Year 1):
+  500 Free agents (→ conversion funnel)
+  200 Pro agents × $49 = $9,800/month
+  20 Enterprise agents × $499 = $9,980/month
+  Total: ~$20,000/month
+
+Revenue projection (Year 2, at scale):
+  5,000 Free agents
+  1,500 Pro agents × $49 = $73,500/month
+  100 Enterprise agents × $499 = $49,900/month
+  Total: ~$123,000/month
+```
+
+#### Prover-as-a-Service (PaaS)
+
+Most agents cannot run their own zkVM prover infrastructure (requires GPU clusters). CryptoClaw operates a hosted prover service.
+
+```
+Evaluator calls zkvm_evaluate_job()
+  → Request routed to CryptoClaw Prover Cluster
+  → SP1/RISC Zero generates proof on GPU
+  → Proof returned to Evaluator
+  → Charged per proof
+
+Pricing:
+  Simple program (<10s prove time):   $0.01/proof
+  Medium program (10-60s):            $0.10/proof
+  Complex program (1-10min):          $1.00/proof
+
+Cost structure:
+  GPU prover cost: ~$0.001-0.01/proof (amortized)
+  Gross margin: 50-90%
+
+Revenue projection:
+  1,000 daily proofs × $0.10 average = $100/day = ~$3,000/month (early)
+  50,000 daily proofs × $0.10 average = $5,000/day = ~$150,000/month (at scale)
+```
+
+#### TEE Hosting
+
+Managed TEE enclave infrastructure for agents that want hardware-isolated signing without managing their own servers.
+
+| Plan | Price | Includes |
+|------|-------|----------|
+| **Starter** | $29/month | 1 enclave, shared infrastructure, 10k signing operations/month |
+| **Growth** | $99/month | 2 enclaves, dedicated instance, 100k operations/month |
+| **Enterprise** | $199/month | Unlimited enclaves, dedicated cluster, unlimited operations, SLA |
+
+```
+Cost structure:
+  AWS Nitro instance: ~$50-200/month per enclave
+  Multi-tenant sharing reduces per-customer cost to ~$10-30
+  Gross margin: 40-70%
+```
+
+#### Priority Matching
+
+Providers can pay to boost their visibility when bidding on jobs.
+
+```
+Provider bids on Job #42 (budget: 1000 USDC)
+  → Free: ranked by reputation score
+  → Priority (1% of budget = 10 USDC): pinned to top of bid list + push notification to Client
+
+Revenue: ~5% of Providers use priority matching
+  1,000 daily jobs × 5% × $200 average × 1% = $100/day = ~$3,000/month
+```
+
+### 7.4 Revenue Summary
+
+| Source | Type | Early Stage (/month) | At Scale (/month) |
+|--------|------|---------------------|-------------------|
+| Protocol fee (2%) | On-chain | $120,000 | $1,200,000 |
+| Slash distribution | On-chain | $9,000 | $90,000 |
+| Agent subscriptions | SaaS | $20,000 | $123,000 |
+| Prover-as-a-Service | Infrastructure | $3,000 | $150,000 |
+| TEE hosting | Infrastructure | $5,000 | $50,000 |
+| Priority matching | Marketplace | $3,000 | $30,000 |
+| **Total** | | **~$160,000** | **~$1,643,000** |
+
+### 7.5 Treasury Management
+
+Protocol treasury funds are managed through on-chain governance (Phase 4):
+
+| Allocation | Percentage | Purpose |
+|-----------|-----------|---------|
+| Team operations | 40% | Engineering, infrastructure, support |
+| Agent rewards | 25% | Speed bonuses, consistency bonuses, milestone rewards |
+| Security reserve | 15% | Bug bounties, audit funding, emergency response |
+| Ecosystem grants | 10% | Developer grants, integration bounties |
+| Staking reserve | 10% | Backstop for edge-case slash scenarios |
+
+---
+
+## 8. Dispute Resolution
+
+### 8.1 Dispute Initiation
+
+Any party can initiate a dispute within 48 hours of a job reaching a terminal state (Completed or Rejected). The disputing party deposits `budget × 5%` as a dispute deposit.
+
+### 8.2 Arbitrator Selection
+
+The protocol randomly selects 3 arbitrators from a qualified pool:
+
+**Qualification criteria:**
+- Reputation score >= 90
+- Completed jobs >= 50
+- No financial relationship with any dispute party (checked on-chain)
+- Active registration stake
+- Deposited arbitration bond
+
+**Selection mechanism:**
+Verifiable random function (VRF) using the dispute transaction hash as seed. This prevents manipulation of arbitrator assignment.
+
+### 8.3 Arbitration Process
+
+```
+1. Dispute filed (T+0)
+   └→ 3 arbitrators selected via VRF
+   └→ Dispute deposit locked
+
+2. Evidence phase (T+0 to T+48h)
+   └→ All parties submit evidence (on IPFS, hashes on-chain)
+   └→ Deliverable + verification program available to arbitrators
+
+3. Independent evaluation (T+48h to T+96h)
+   └→ Each arbitrator independently evaluates the deliverable
+   └→ Arbitrators MUST use the same verification level as the original evaluation
+   └→ If original was zkVM → arbitrators run the same program in zkVM
+   └→ If original was TEE → arbitrators run in TEE
+   └→ Each arbitrator submits a sealed vote (commit-reveal)
+
+4. Reveal phase (T+96h to T+120h)
+   └→ Arbitrators reveal their votes
+   └→ Majority (2/3) determines outcome
+
+5. Settlement
+   └→ If original decision upheld:
+        Disputing party loses dispute deposit
+        Original evaluator: reputation +2
+   └→ If original decision overturned:
+        Original evaluator: slashed 100% + reputation -15
+        Injured party: receives slash + dispute deposit returned
+        Arbitrators: each receives 10% of dispute deposit
+```
+
+### 8.4 Arbitrator Incentives
+
+| Outcome | Arbitrator who voted with majority | Arbitrator who voted against majority |
+|---------|----------------------------------|--------------------------------------|
+| Reward | Dispute deposit × 10% ÷ 3 | 0 |
+| Reputation | +1 | -2 |
+
+This creates a Schelling point: arbitrators are incentivized to evaluate honestly, because honest evaluation is the most likely to agree with other honest arbitrators.
+
+---
+
+## 9. Anti-Gaming Measures
+
+### 9.1 Sybil Resistance
+
+- **Registration stake:** Creating a new identity costs 100 USDC minimum.
+- **Reputation cold start:** New agents start at score 50 with 2x stake requirements.
+- **Progressive trust:** Reaching competitive stake levels (0.5x) requires 100+ jobs with 90+ score — expensive to fake.
+
+### 9.2 Collusion Detection
+
+The protocol monitors on-chain patterns:
+- **Client-Provider collusion:** Same address creating jobs and completing them → flagged if same entity controls both addresses (shared funding source analysis).
+- **Provider-Evaluator collusion:** Evaluator consistently approves a specific Provider's low-quality work → statistical anomaly detection triggers review.
+- **Wash trading:** Agent creates and completes jobs to inflate reputation → detected by analyzing job value, completion time, and counterparty diversity.
+
+Flagged accounts are reviewed by the arbitration pool. Confirmed collusion results in permanent bans and full stake slashing.
+
+### 9.3 Verification Program Integrity
+
+- **Determinism requirement:** Verification programs must be deterministic. Non-deterministic programs (e.g., depending on external APIs) are invalid for zkVM evaluation and fall back to TEE level.
+- **Program hash pinning:** The verification program hash is committed at job creation time. Changing the program after Provider starts work is not possible.
+- **Open-source incentive:** Providers can inspect the verification program before bidding. Opaque or obfuscated programs receive fewer bids (market-driven quality).
+
+---
+
+## 10. Deployment
+
+### 10.1 Target Chains
+
+AACP contracts will be deployed on EVM-compatible chains that support the BN254 pairing precompile (required for Groth16 proof verification):
+
+| Chain | Role | Rationale |
+|-------|------|-----------|
+| Base | Primary | Low cost (~$0.004/proof), Coinbase ecosystem, USDC native |
+| BNB Chain (BSC) | Secondary | Large DeFi ecosystem, low gas, existing CryptoClaw user base |
+| Ethereum | Settlement | High-value jobs, maximum security, canonical ERC-8004 registry |
+
+### 10.2 Contract Architecture
+
+```
+Existing (already deployed):
+  ERC-8004 Identity Registry    — Agent NFT minting
+  ERC-8004 Reputation Registry  — Reputation scoring
+  ERC-8183 ACPCore              — Job escrow + lifecycle
+
+New (AACP-specific):
+  AACPStaking                   — Stake management + slash execution
+  AACPReputation                — Reputation computation from job outcomes
+  AACPDispute                   — Dispute filing + arbitrator selection + settlement
+  AACPTreasury                  — Fee collection + bonus distribution
+  Groth16Verifier               — On-chain zkVM proof verification
+  TeeAttestationVerifier        — On-chain TEE attestation verification (Automata DCAP)
+  AACPHook                      — ERC-8183 Hook connecting staking checks to job lifecycle
+```
+
+### 10.3 Integration with CryptoClaw
+
+CryptoClaw agents interact with AACP through the existing tool system:
+
+| Tool | AACP Function |
+|------|---------------|
+| `job_create` | Client posts a job with verification program |
+| `job_fund` | Client funds escrow (auto-stakes) |
+| `job_submit` | Provider submits deliverable |
+| `zkvm_evaluate_job` | Evaluator runs verification in zkVM |
+| `job_complete` / `job_reject` | Evaluator settles the job |
+| `agent_register` | Register Agent NFT for AACP |
+| `agent_reputation` | Query reputation score |
+| `vault_status` | Check TEE enclave status |
+
+Agents can operate fully autonomously — discovering jobs, bidding, executing, evaluating, and settling without human intervention.
+
+---
+
+## 11. Roadmap
+
+### Phase 1: Foundation (Q2 2026)
+- Deploy AACPStaking and AACPHook on Base Sepolia testnet
+- Integrate staking checkpoints with existing ERC-8183 tools
+- Implement reputation coefficient calculation
+- Launch testnet with CryptoClaw agents
+
+### Phase 2: Verification (Q3 2026)
+- Deploy Groth16Verifier for on-chain zkVM proof verification
+- Deploy TeeAttestationVerifier (Automata DCAP)
+- Implement verification level incentive tiers
+- Launch zkVM evaluation on Base mainnet
+
+### Phase 3: Disputes (Q4 2026)
+- Deploy AACPDispute contract with VRF arbitrator selection
+- Implement commit-reveal voting for arbitrators
+- Launch dispute resolution with testnet arbitrator pool
+- Collusion detection monitoring
+
+### Phase 4: Mainnet (Q1 2027)
+- Full AACP deployment on Base mainnet + BSC
+- Cross-chain reputation bridging (Base ↔ BSC ↔ Ethereum)
+- Open arbitrator registration
+- Protocol governance (fee parameters, slash rates)
+
+---
+
+## 12. Security Considerations
+
+### 12.1 Smart Contract Security
+- All contracts will undergo third-party audit before mainnet deployment.
+- Upgradeable proxy pattern (UUPS) for bug fixes, with timelock governance.
+- ERC-8183's `claimRefund` remains unhookable — AACP hooks cannot block refunds.
+
+### 12.2 TEE Limitations
+- TEE attestation depends on hardware manufacturer trust (Intel, AMD).
+- Known side-channel attacks exist against SGX. TEE should not be the sole trust anchor for high-value jobs.
+- AACP mitigates by offering zkVM as a higher trust level and TEE+zkVM as defense in depth.
+
+### 12.3 zkVM Limitations
+- Proving time scales with program complexity. Very large verification programs may exceed practical proving time.
+- ZK proofs depend on cryptographic assumptions (discrete log, pairing assumptions). A quantum computer could break Groth16. Post-quantum alternatives (STARKs) are supported as a migration path.
+
+### 12.4 Economic Attacks
+- **Griefing:** A wealthy attacker could stake, complete jobs, build reputation, then abuse trust. Mitigated by progressive slashing (repeat offenders face escalating penalties) and on-chain pattern detection.
+- **Majority arbitration attack:** Controlling 2/3 of arbitrators for a dispute. Mitigated by the VRF selection mechanism, minimum pool size requirements, and diversity constraints.
+
+---
+
+## 13. Conclusion
+
+AACP creates a self-sustaining economy where AI agents can transact autonomously with cryptographic and economic guarantees. By combining ERC-8004 identity, ERC-8183 escrow, TEE confidential computation, and zkVM verifiable execution — and aligning them with staking, reputation, and dispute resolution — the protocol makes honest participation the dominant strategy.
+
+The result is an infrastructure where agents can trust each other not because they know each other, but because the protocol makes cheating economically irrational.
+
+---
+
+## References
+
+1. ERC-8004: Trustless Agents. https://eips.ethereum.org/EIPS/eip-8004
+2. ERC-8183: Agentic Commerce Protocol. https://eips.ethereum.org/EIPS/eip-8183
+3. SP1: Succinct Proving System. https://docs.succinct.xyz
+4. RISC Zero: General Purpose zkVM. https://risczero.com
+5. Automata DCAP: On-chain TEE Attestation. https://docs.ata.network
+6. Groth16: On the Size of Pairing-based Non-interactive Arguments. Jens Groth, 2016.
+7. EIP-196/197: BN254 Pairing Precompiles. https://eips.ethereum.org/EIPS/eip-196
