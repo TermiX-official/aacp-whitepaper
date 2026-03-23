@@ -691,7 +691,13 @@ Each agent's violation count is tracked per role in the ERC-8004 Reputation Regi
 |-----------|--------------|----------------------|-------------------|
 | Timeout: no evaluation within 48h of submission | 30% of locked amount | 50% of locked amount | -5 |
 | Decision overturned by arbitration | 60% of locked amount | 100% of locked amount | -15 |
-| Detected collusion with provider (on-chain analysis) | 100% of locked amount + ban | — | Score reset to 0 |
+| Borderline manipulation (score within 10% of threshold, overturned by arbitration) | 80% of locked amount | 100% of locked amount | -20 |
+| Statistical anomaly flagged and confirmed (see §9.4) | 40% of locked amount | 80% of locked amount | -10 |
+| Selective submission (multiple evaluation runs detected, only adverse result submitted) | 70% of locked amount | 100% of locked amount | -15 |
+| Human panel member: outlier score (deviation > 25 from panel median on 3+ dimensions) | 20% of locked amount | 50% of locked amount | -5 |
+| Human panel member: collusion with other panel members (correlated sealed scores + shared funding source) | 100% of locked amount + ban | — | Score reset to 0 |
+| Detected collusion with Provider (on-chain analysis) | 100% of locked amount + ban | — | Score reset to 0 |
+| Detected collusion with Client (reject-to-refund scheme) | 100% of locked amount + ban | — | Score reset to 0 |
 
 #### Client Slashing
 
@@ -908,9 +914,12 @@ Verifiable random function (VRF) using the dispute transaction hash as seed. Thi
 
 3. Independent evaluation (T+48h to T+96h)
    └→ Each arbitrator independently evaluates the deliverable
-   └→ Arbitrators MUST use the same verification level as the original evaluation
-   └→ If original was zkVM → arbitrators run the same program in zkVM
-   └→ If original was TEE → arbitrators run in TEE
+   └→ Arbitrators MUST use the same verification strategy as the original evaluation
+   └→ If strategy was program → arbitrators re-run the same program in zkVM
+   └→ If strategy was rubric (multi-llm) → arbitrators re-run rubric in TEE
+   └→ If strategy was rubric (human) → arbitrators score rubric independently
+        (arbitrators do NOT see original human panel scores)
+   └→ If strategy was hybrid → arbitrators re-run both components
    └→ Each arbitrator submits a sealed vote (commit-reveal)
 
 4. Reveal phase (T+96h to T+120h)
@@ -935,6 +944,76 @@ Verifiable random function (VRF) using the dispute transaction hash as seed. Thi
 | Reputation | +1 | -2 |
 
 This creates a Schelling point: arbitrators are incentivized to evaluate honestly, because honest evaluation is the most likely to agree with other honest arbitrators.
+
+### 8.5 Protocol-Initiated Disputes
+
+The current dispute mechanism is **reactive** — it depends on the injured party paying a dispute deposit. This creates a cost barrier that sophisticated Evaluators can exploit (e.g., targeting low-budget jobs where Providers won't bother disputing, or borderline-failing deliverables where Providers lack confidence to challenge).
+
+AACP addresses this with **protocol-initiated disputes** — disputes triggered automatically by the monitoring system (§9.4) without requiring a victim to pay.
+
+```
+Protocol-initiated dispute flow:
+
+  1. Monitoring system detects anomaly (see §9.4 triggers)
+  2. AACPDispute.protocolDispute(jobId) called by monitoring oracle
+     → No dispute deposit required from any party
+     → Dispute deposit is covered by protocol treasury
+  3. Arbitration proceeds as normal (§8.3)
+  4. Settlement:
+     → If Evaluator found at fault:
+          Evaluator slashed per §6.4
+          Injured party compensated from slash proceeds
+          Treasury reimbursed from slash proceeds
+     → If Evaluator vindicated:
+          No penalty to anyone
+          Treasury absorbs the dispute cost (cost of maintaining trust)
+```
+
+Protocol-initiated disputes are triggered when:
+- The monitoring system flags a statistically significant anomaly (see §9.4)
+- A `human` panel produces scores with suspiciously low variance across all dimensions (potential coordination)
+- An Evaluator's rejection is accompanied by a score within 5% of the threshold on 3+ dimensions (borderline manipulation pattern)
+- Cross-referencing reveals the Evaluator evaluated the same Provider 5+ times with systematically lower scores than network average
+
+The protocol bears the cost of false positives (treasury absorbs dispute costs when the Evaluator is vindicated). This is acceptable because the alternative — unchecked Evaluator misbehavior — erodes network trust and reduces long-term revenue.
+
+### 8.6 Dispute Cost Scaling
+
+The fixed `budget × 5%` dispute deposit creates an asymmetric barrier: it disproportionately discourages disputes on low-budget jobs while being trivially cheap on high-budget jobs. AACP uses a scaled model:
+
+```
+Dispute deposit calculation:
+
+  Base deposit: budget × 5%
+
+  Adjustments:
+  ├── Evaluator track record:
+  │     If Evaluator has been overturned in last 10 jobs → deposit reduced to budget × 2.5%
+  │     If Evaluator has 0 overturn in last 100 jobs → deposit stays at budget × 5%
+  │
+  ├── Verification strategy:
+  │     program (zkVM): budget × 2% (result is deterministic, dispute is easy to verify)
+  │     rubric (multi-llm): budget × 5% (standard)
+  │     rubric (human): budget × 4% (human scores are on-chain, re-evaluation is cheaper)
+  │     hybrid: budget × 3% (partial deterministic evidence available)
+  │
+  ├── Score proximity to threshold:
+  │     If total score is within 10% of threshold → deposit reduced by 50%
+  │     (borderline results warrant cheaper disputes)
+  │
+  └── Minimum deposit: 5 USDC (floor to prevent spam disputes)
+
+  Partial refund on close disputes:
+    If arbitration upholds original decision but arbitrator scores differ by < 10
+    from Evaluator scores → disputing party receives 50% deposit refund
+    (the dispute was reasonable even though it didn't succeed)
+```
+
+This model ensures:
+- **Low-budget job providers can afford to dispute.** A 50 USDC job with a borderline score costs only ~1.25 USDC to dispute.
+- **Deterministic evaluations are cheap to challenge.** If a zkVM result is disputed, the arbitrator just re-runs the same program — minimal cost.
+- **Reasonable disputes are not punished harshly.** Close scores suggest genuine disagreement, not frivolous disputing.
+- **Spam disputes are still expensive.** The 5 USDC floor and reputation impact (-2 for failed disputes) prevent abuse.
 
 ---
 
@@ -961,6 +1040,132 @@ Flagged accounts are reviewed by the arbitration pool. Confirmed collusion resul
 - **Strategy hash pinning:** The full Verification Strategy hash (including program, rubric dimensions, prompts, weights, and threshold) is committed on-chain at job creation time. The Client cannot change evaluation criteria after a Provider starts work.
 - **Open-source incentive:** Providers can inspect the complete Verification Strategy before bidding. Unreasonable rubric criteria or opaque programs receive fewer bids (market-driven quality).
 - **Rubric fairness:** If arbitration determines a rubric was designed to always fail (e.g., contradictory dimension prompts, impossible thresholds), the Client is slashed for malicious job posting. Repeat offenses face escalating penalties per §6.4.
+
+### 9.4 Evaluator Accountability
+
+The protocol's dispute mechanism (§8) is reactive — it depends on victims identifying misbehavior and paying to challenge it. AACP supplements this with a **proactive monitoring system** that continuously analyzes Evaluator behavior across all jobs and triggers protocol-initiated disputes (§8.5) when anomalies are detected.
+
+#### 9.4.1 Statistical Monitoring
+
+The AACPReputation contract tracks per-Evaluator metrics in a rolling window of the last 100 evaluations:
+
+```
+Metrics tracked per Evaluator:
+
+  approvalRate:        % of jobs approved (completed vs rejected)
+  avgScore:            Average weighted rubric score given
+  scoreStdDev:         Standard deviation of scores given
+  avgDevFromLLM:       Average deviation from LLM reference score (for human mode)
+  counterpartyEntropy: Diversity of Providers evaluated (Shannon entropy)
+  borderlineRate:      % of scores within 10% of threshold
+  disputeRate:         % of evaluations that were disputed
+  overturnRate:        % of disputes where decision was overturned
+  avgEvalTime:         Average time between submission and evaluation
+```
+
+#### 9.4.2 Anomaly Detection Triggers
+
+The monitoring oracle evaluates these metrics against network-wide baselines. A flag is raised when an Evaluator's behavior deviates significantly:
+
+| Anomaly | Detection rule | Action |
+|---------|---------------|--------|
+| **Systematic bias** | Approval rate < networkAvg - 2σ or > networkAvg + 2σ over 20+ jobs | Flag for review; if confirmed → protocol-initiated dispute on most recent flagged job |
+| **Borderline manipulation** | borderlineRate > 30% (scores cluster just below threshold) | Flag + protocol-initiated dispute; if pattern confirmed → slash per §6.4 |
+| **Targeted harassment** | Evaluator rejects same Provider 3+ times while approving others at normal rate | Block Evaluator from being assigned to that Provider; flag for review |
+| **Speed gaming** | avgEvalTime < 5 minutes for rubric evaluations (suggesting no real evaluation) | Flag; if TEE attestation shows minimal compute time → slash for timeout-equivalent |
+| **Score clustering** | scoreStdDev < 3 across 20+ evaluations (giving nearly identical scores to all) | Flag as rubber-stamping; review sample of jobs |
+| **Counterparty concentration** | counterpartyEntropy < threshold (repeatedly evaluating the same few Providers) | Trigger rotation (§9.4.4); flag for collusion review |
+| **Reject-to-refund scheme** | High rejection rate + same Client re-posts identical jobs + same Evaluator re-evaluates | Flag both Evaluator and Client for collusion; protocol-initiated dispute |
+
+#### 9.4.3 LLM Reference Scoring (Shadow Evaluation)
+
+For jobs using `human` consensus mode, the protocol optionally runs a parallel `multi-llm` shadow evaluation. This shadow score is **not** used for settlement — the human panel's decision stands. Instead, it serves as a reference anchor for anomaly detection:
+
+```
+Shadow evaluation flow:
+
+  1. Provider submits deliverable → Job enters Submitted state
+  2. Human evaluator panel is selected and begins evaluation
+  3. In parallel, protocol runs multi-llm evaluation using same rubric (in TEE)
+     → Shadow scores stored privately, NOT visible to human panel
+  4. After human panel submits scores, compare:
+
+  Per-dimension divergence = |human_median - llm_median|
+
+  If divergence > 25 on majority of dimensions:
+    → Job flagged as "high-divergence"
+    → Does NOT auto-trigger dispute (human judgment may be legitimately different)
+    → Contributes to Evaluator's avgDevFromLLM metric
+    → If avgDevFromLLM > 25 across 10+ jobs → triggers protocol-initiated dispute
+
+  If divergence < 5 on all dimensions:
+    → High confidence in evaluation quality
+    → Evaluator reputation +1 bonus
+```
+
+This approach respects the Client's choice of `human` consensus (the shadow score doesn't override humans) while providing a statistical safety net. An honest human evaluator will naturally diverge from LLMs on some jobs — but systematic divergence across many jobs indicates a problem.
+
+#### 9.4.4 Evaluator Rotation and Blind Evaluation
+
+**Rotation rules:**
+
+To prevent Evaluator-Provider relationships from developing, the protocol enforces rotation:
+
+- An Evaluator cannot evaluate the same Provider more than 3 times in any 30-day window.
+- An Evaluator cannot evaluate the same Client's jobs more than 5 times in any 30-day window.
+- If the available Evaluator pool is too small for rotation, the constraint is relaxed but all repeated pairings are flagged for monitoring.
+
+**Blind evaluation:**
+
+Evaluators do not know the identity of the Provider when scoring deliverables:
+
+```
+Information visible to Evaluator:
+  ✓ Job description and requirements
+  ✓ Verification strategy (rubric, program, threshold)
+  ✓ Deliverable content
+  ✗ Provider identity (Agent NFT ID)
+  ✗ Provider reputation score
+  ✗ Provider's past work history
+
+De-anonymization after settlement:
+  Provider identity is revealed only after the Evaluator submits their score.
+  This prevents bias based on reputation ("this is a top Provider, auto-approve")
+  and targeted harassment ("I always reject this Provider").
+```
+
+For `human` consensus mode, human panel members additionally cannot see each other's scores (sealed scoring, already specified in §5.5.3) and are selected from different geographic regions when metadata is available.
+
+#### 9.4.5 Evaluator Accountability Summary
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                Evaluator Accountability Layers               │
+│                                                              │
+│  Layer 1: Prevention                                         │
+│  ├── Blind evaluation (Provider identity hidden)             │
+│  ├── Evaluator rotation (max 3 same-Provider in 30 days)    │
+│  ├── TEE enforcement (rubric executed as defined)            │
+│  └── Sealed scoring for human panels                         │
+│                                                              │
+│  Layer 2: Detection                                          │
+│  ├── Statistical monitoring (9 metrics, rolling window)      │
+│  ├── LLM shadow evaluation (reference anchor)                │
+│  ├── Anomaly detection triggers (7 trigger types)            │
+│  └── On-chain pattern analysis (collusion, wash trading)     │
+│                                                              │
+│  Layer 3: Response                                           │
+│  ├── Protocol-initiated disputes (no victim cost)            │
+│  ├── Progressive slashing (9 violation types)                │
+│  ├── Reputation impact (up to score reset + ban)             │
+│  └── Scaled dispute costs (cheaper for likely-valid disputes)│
+│                                                              │
+│  Layer 4: Recovery                                           │
+│  ├── Injured party compensation (60% of slash)               │
+│  ├── Partial dispute refund for close scores                 │
+│  └── Evaluator rehabilitation (500 clean jobs to reset)      │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
