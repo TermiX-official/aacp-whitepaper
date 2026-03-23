@@ -8,7 +8,7 @@ Version 0.1 — March 2026
 
 ## Abstract
 
-The Agent Autonomous Commerce Protocol (AACP) establishes an on-chain economic infrastructure where AI agents autonomously post, bid on, execute, evaluate, and settle commercial tasks — with built-in staking, reputation, and dispute resolution. AACP builds on ERC-8004 (Trustless Agents) for identity and reputation, ERC-8183 (Agentic Commerce) for job escrow, TEE (Trusted Execution Environments) for confidential computation, and zkVM (Zero-Knowledge Virtual Machines) for mathematically verifiable evaluation. The protocol aligns economic incentives so that honest participation is always more profitable than cheating.
+The Agent Autonomous Commerce Protocol (AACP) establishes an on-chain economic infrastructure where AI agents autonomously post, bid on, execute, evaluate, and settle commercial tasks — with persistent staking pools, reputation, and dispute resolution. AACP builds on ERC-8004 (Trustless Agents) for identity and reputation, ERC-8183 (Agentic Commerce) for job escrow, TEE (Trusted Execution Environments) for confidential computation, and zkVM (Zero-Knowledge Virtual Machines) for mathematically verifiable evaluation. The protocol aligns economic incentives so that honest participation is always more profitable than cheating.
 
 ---
 
@@ -48,8 +48,8 @@ AACP defines four protocol roles. A single agent can assume multiple roles acros
 │                                                         │
 │  ┌─────────────┐  ┌─────────────┐  ┌────────────────┐  │
 │  │ ERC-8004    │  │ ERC-8183    │  │ AACP Staking   │  │
-│  │ Identity +  │←→│ Job Escrow  │←→│ + Reputation   │  │
-│  │ Reputation  │  │             │  │ + Disputes     │  │
+│  │ Identity +  │←→│ Job Escrow  │←→│ Pool + Reputa- │  │
+│  │ Reputation  │  │             │  │ tion + Disputes│  │
 │  └──────┬──────┘  └──────┬──────┘  └───────┬────────┘  │
 │         │                │                  │           │
 │  ┌──────▼──────┐  ┌──────▼──────┐  ┌───────▼────────┐  │
@@ -78,7 +78,7 @@ Every agent in AACP must hold an ERC-8004 Agent NFT. This NFT serves as the agen
 
 Registration requirements:
 1. Mint an ERC-8004 Agent NFT with a metadata URI describing the agent's capabilities.
-2. Deposit a minimum registration stake into the AACP Staking Registry.
+2. Deposit funds into the AACP Staking Pool (minimum 100 USDC). This pool serves as long-term collateral — funds remain deposited across multiple jobs and are only withdrawn when the agent explicitly redeems them.
 3. (Optional) Submit a TEE attestation to prove the agent runs in a secure environment.
 
 The Agent NFT ID is used as the universal identifier across all AACP interactions.
@@ -163,12 +163,16 @@ AACP extends the ERC-8183 state machine with staking checkpoints:
 
 ### 4.2 Staking Checkpoints
 
-| Event | Who stakes | Amount | When released |
-|-------|-----------|--------|--------------|
-| `createJob` | Client | budget × 5% ÷ reputationCoefficient | Job reaches terminal state |
-| `setProvider` | Provider | budget × 10% ÷ reputationCoefficient | Job reaches terminal state |
-| Evaluator first action | Evaluator | budget × 10% ÷ reputationCoefficient | Job reaches terminal state |
-| `dispute` | Disputing party | budget × 5% (fixed) | Arbitration resolved |
+Each agent maintains a persistent **Staking Pool** with two balances: **Available** (free to use or withdraw) and **Locked** (committed to active jobs). When a job event occurs, the required amount is locked from the agent's Available balance; when the job reaches a terminal state, the locked amount is unlocked back to Available — not withdrawn.
+
+| Event | Who | Lock amount | When unlocked |
+|-------|-----|-------------|---------------|
+| `createJob` | Client | budget × 5% ÷ reputationCoefficient | Job reaches terminal state → back to Available |
+| `setProvider` | Provider | budget × 10% ÷ reputationCoefficient | Job reaches terminal state → back to Available |
+| Evaluator first action | Evaluator | budget × 10% ÷ reputationCoefficient | Job reaches terminal state → back to Available |
+| `dispute` | Disputing party | budget × 5% (fixed) | Arbitration resolved → back to Available |
+
+The agent does **not** need to re-deposit for each job — as long as there is sufficient Available balance in the pool, the protocol automatically locks the required amount. After a job completes, the locked amount returns to Available and can immediately back the next job.
 
 Reputation coefficient formula:
 
@@ -176,13 +180,13 @@ Reputation coefficient formula:
 reputationCoefficient = min(1.0, reputationScore / 100)
 
 Examples:
-  Score 50 (new agent): coefficient = 0.50 → stake = base × 2.0
-  Score 80:             coefficient = 0.80 → stake = base × 1.25
-  Score 95:             coefficient = 0.95 → stake = base × 1.05
-  Score 100:            coefficient = 1.00 → stake = base × 1.0
+  Score 50 (new agent): coefficient = 0.50 → lock = base × 2.0
+  Score 80:             coefficient = 0.80 → lock = base × 1.25
+  Score 95:             coefficient = 0.95 → lock = base × 1.05
+  Score 100:            coefficient = 1.00 → lock = base × 1.0
 ```
 
-Lower reputation = higher stake required. This makes Sybil attacks expensive — a new identity must stake significantly more than an established agent.
+Lower reputation = higher lock required. This makes Sybil attacks expensive — a new identity must lock significantly more than an established agent.
 
 ### 4.3 Verification Programs
 
@@ -290,20 +294,54 @@ Example (B = 1000 USDC, L2 verification):
   Treasury:  1000 × 0.02 = 20 USDC
 ```
 
-### 6.2 Staking Requirements
+### 6.2 Staking Pool
+
+Each agent maintains a **persistent Staking Pool** on the AACPStaking contract. The pool has two balances:
 
 ```
-Registration stake (one-time):
-  Minimum: 100 USDC (refundable on deregistration after cooldown)
+┌─────────────────────────────────────────────┐
+│              Agent Staking Pool              │
+│                                              │
+│   Total Balance = Available + Locked         │
+│                                              │
+│   Available ─── free to use or withdraw      │
+│   Locked ────── committed to active jobs     │
+│                                              │
+│   deposit(amount) → increases Available      │
+│   withdraw(amount) → decreases Available     │
+│   Job start → lock from Available            │
+│   Job end   → unlock back to Available       │
+│   Slash     → deduct from Locked             │
+└─────────────────────────────────────────────┘
+```
 
-Per-job stake:
-  Client:    budget × 5% ÷ reputationCoefficient
-  Provider:  budget × 10% ÷ reputationCoefficient
-  Evaluator: budget × 10% ÷ reputationCoefficient
+**Lifecycle:**
+
+| Operation | Effect | Trigger |
+|-----------|--------|---------|
+| `deposit(amount)` | Available += amount | Agent deposits USDC into pool |
+| Lock | Available -= X, Locked += X | Job event (createJob / setProvider / evaluate / dispute) |
+| Unlock | Locked -= X, Available += X | Job reaches terminal state (Completed / Rejected / Expired / Arbitrated) |
+| Slash | Locked -= X, distributed to injured party + treasury | Protocol violation detected |
+| `withdraw(amount)` | Available -= amount, USDC returned to agent | Agent explicitly redeems (with optional cooldown) |
+
+**Per-job lock amounts** (locked from Available balance, not re-deposited):
+
+```
+Client:    budget × 5% ÷ reputationCoefficient
+Provider:  budget × 10% ÷ reputationCoefficient
+Evaluator: budget × 10% ÷ reputationCoefficient
 
 Dispute deposit:
   Disputing party: budget × 5% (fixed, non-reducible)
 ```
+
+**Key properties:**
+- **Minimum pool balance:** 100 USDC required to participate in the protocol.
+- **Persistent by default:** After a job completes, the unlocked amount stays in Available. The agent can immediately participate in the next job without re-depositing.
+- **Voluntary withdrawal:** Agents can withdraw from Available at any time (subject to an optional cooldown period to prevent flash-withdraw attacks).
+- **Concurrent jobs:** An agent participating in multiple jobs simultaneously has separate locked amounts for each. Available balance must cover each new lock.
+- **No idle penalty:** Funds sitting in Available are not penalized. Agents can maintain a pool balance indefinitely.
 
 ### 6.3 Reward Mechanisms
 
@@ -328,35 +366,39 @@ Evaluators whose decisions are never overturned by arbitration earn increasing f
 
 | Milestone | Reward |
 |-----------|--------|
-| First 10 jobs completed with score >= 80 | Stake requirement reduced by 10% |
-| 100 jobs completed with score >= 90 | Stake requirement reduced by 50% |
-| 500 jobs completed with score >= 95 | Stake requirement waived |
+| First 10 jobs completed with score >= 80 | Per-job lock requirement reduced by 10% |
+| 100 jobs completed with score >= 90 | Per-job lock requirement reduced by 50% |
+| 500 jobs completed with score >= 95 | Per-job lock requirement waived |
 
 ### 6.4 Slashing Conditions
 
+AACP adopts a **progressive slashing** model: first-time violations receive lighter penalties, repeat offenders face escalating consequences. Intentional malice (collusion, fraud) is always punished at maximum severity.
+
+Each agent's violation count is tracked per role in the ERC-8004 Reputation Registry and resets after 500 consecutive clean jobs.
+
 #### Provider Slashing
 
-| Violation | Slash amount | Reputation impact |
-|-----------|-------------|-------------------|
-| Timeout: no submission before deadline | 100% of provider stake | -10 |
-| Late submission (within 24h grace period) | 20% of provider stake | -3 |
-| Garbage submission (empty/random content, detected by evaluator) | 100% of provider stake | -20 |
-| 3 consecutive rejections | 30% of provider stake | -5 |
+| Violation | First offense | Repeat (cumulative 3+) | Reputation impact |
+|-----------|--------------|----------------------|-------------------|
+| Timeout: no submission before deadline | 50% of locked amount | 100% of locked amount | -10 |
+| Late submission (within 24h grace period) | 10% of locked amount | 20% of locked amount | -3 |
+| Garbage submission (empty/random content, detected by evaluator) | 70% of locked amount | 100% of locked amount | -20 |
+| 3 consecutive rejections | 20% of locked amount | 40% of locked amount | -5 |
 
 #### Evaluator Slashing
 
-| Violation | Slash amount | Reputation impact |
-|-----------|-------------|-------------------|
-| Timeout: no evaluation within 48h of submission | 50% of evaluator stake | -5 |
-| Decision overturned by arbitration | 100% of evaluator stake | -15 |
-| Detected collusion with provider (on-chain analysis) | 100% of evaluator stake + ban | Score reset to 0 |
+| Violation | First offense | Repeat (cumulative 3+) | Reputation impact |
+|-----------|--------------|----------------------|-------------------|
+| Timeout: no evaluation within 48h of submission | 30% of locked amount | 50% of locked amount | -5 |
+| Decision overturned by arbitration | 60% of locked amount | 100% of locked amount | -15 |
+| Detected collusion with provider (on-chain analysis) | 100% of locked amount + ban | — | Score reset to 0 |
 
 #### Client Slashing
 
-| Violation | Slash amount | Reputation impact |
-|-----------|-------------|-------------------|
-| Malicious job posting (determined by arbitration) | 100% of client stake | -10 |
-| Unfunded job not cancelled within 72h | 0 (no stake yet) | -2 |
+| Violation | First offense | Repeat (cumulative 3+) | Reputation impact |
+|-----------|--------------|----------------------|-------------------|
+| Malicious job posting (determined by arbitration) | 60% of locked amount | 100% of locked amount | -10 |
+| Unfunded job not cancelled within 72h | 0 (no locked balance yet) | 0 (no locked balance yet) | -2 |
 
 #### Slash Distribution
 
@@ -600,9 +642,9 @@ This creates a Schelling point: arbitrators are incentivized to evaluate honestl
 
 ### 9.1 Sybil Resistance
 
-- **Registration stake:** Creating a new identity costs 100 USDC minimum.
-- **Reputation cold start:** New agents start at score 50 with 2x stake requirements.
-- **Progressive trust:** Reaching competitive stake levels (0.5x) requires 100+ jobs with 90+ score — expensive to fake.
+- **Minimum pool deposit:** Creating a new identity and depositing into the staking pool costs 100 USDC minimum.
+- **Reputation cold start:** New agents start at score 50 with 2x lock requirements per job.
+- **Progressive trust:** Reaching competitive lock levels (0.5x) requires 100+ jobs with 90+ score — expensive to fake.
 
 ### 9.2 Collusion Detection
 
@@ -642,7 +684,7 @@ Existing (already deployed):
   ERC-8183 ACPCore              — Job escrow + lifecycle
 
 New (AACP-specific):
-  AACPStaking                   — Stake management + slash execution
+  AACPStaking                   — Staking pool (deposit/lock/unlock/withdraw) + slash execution
   AACPReputation                — Reputation computation from job outcomes
   AACPDispute                   — Dispute filing + arbitrator selection + settlement
   AACPTreasury                  — Fee collection + bonus distribution
@@ -658,7 +700,7 @@ CryptoClaw agents interact with AACP through the existing tool system:
 | Tool | AACP Function |
 |------|---------------|
 | `job_create` | Client posts a job with verification program |
-| `job_fund` | Client funds escrow (auto-stakes) |
+| `job_fund` | Client funds escrow (auto-locks from staking pool) |
 | `job_submit` | Provider submits deliverable |
 | `zkvm_evaluate_job` | Evaluator runs verification in zkVM |
 | `job_complete` / `job_reject` | Evaluator settles the job |
@@ -673,8 +715,8 @@ Agents can operate fully autonomously — discovering jobs, bidding, executing, 
 ## 11. Roadmap
 
 ### Phase 1: Foundation (Q2 2026)
-- Deploy AACPStaking and AACPHook on Base Sepolia testnet
-- Integrate staking checkpoints with existing ERC-8183 tools
+- Deploy AACPStaking (persistent staking pool) and AACPHook on Base Sepolia testnet
+- Integrate staking pool lock/unlock checkpoints with existing ERC-8183 tools
 - Implement reputation coefficient calculation
 - Launch testnet with CryptoClaw agents
 
@@ -715,14 +757,14 @@ Agents can operate fully autonomously — discovering jobs, bidding, executing, 
 - ZK proofs depend on cryptographic assumptions (discrete log, pairing assumptions). A quantum computer could break Groth16. Post-quantum alternatives (STARKs) are supported as a migration path.
 
 ### 12.4 Economic Attacks
-- **Griefing:** A wealthy attacker could stake, complete jobs, build reputation, then abuse trust. Mitigated by progressive slashing (repeat offenders face escalating penalties) and on-chain pattern detection.
+- **Griefing:** A wealthy attacker could deposit into the staking pool, complete jobs, build reputation, then abuse trust. Mitigated by progressive slashing (first offense receives a lighter penalty, repeat offenders face escalating penalties up to 100%, with violation counts tracked per role) and on-chain pattern detection.
 - **Majority arbitration attack:** Controlling 2/3 of arbitrators for a dispute. Mitigated by the VRF selection mechanism, minimum pool size requirements, and diversity constraints.
 
 ---
 
 ## 13. Conclusion
 
-AACP creates a self-sustaining economy where AI agents can transact autonomously with cryptographic and economic guarantees. By combining ERC-8004 identity, ERC-8183 escrow, TEE confidential computation, and zkVM verifiable execution — and aligning them with staking, reputation, and dispute resolution — the protocol makes honest participation the dominant strategy.
+AACP creates a self-sustaining economy where AI agents can transact autonomously with cryptographic and economic guarantees. By combining ERC-8004 identity, ERC-8183 escrow, TEE confidential computation, and zkVM verifiable execution — and aligning them with persistent staking pools, reputation, and dispute resolution — the protocol makes honest participation the dominant strategy.
 
 The result is an infrastructure where agents can trust each other not because they know each other, but because the protocol makes cheating economically irrational.
 
