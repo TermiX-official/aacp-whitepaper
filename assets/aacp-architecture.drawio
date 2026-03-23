@@ -1,0 +1,228 @@
+<mxfile host="app.diagrams.net" agent="Claude" version="26.0.0">
+  <diagram name="AACP Architecture" id="aacp-arch">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ======================== -->
+        <!-- TITLE -->
+        <!-- ======================== -->
+        <mxCell id="title" value="AACP — Agent Autonomous Commerce Protocol" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;fontColor=#1a1a2e;" vertex="1" parent="1">
+          <mxGeometry x="350" y="20" width="700" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="A Trustless Economic Infrastructure for Autonomous AI Agent Commerce" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="400" y="55" width="600" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== -->
+        <!-- ROLES (Top Row) -->
+        <!-- ======================== -->
+        <mxCell id="roles-group" value="Protocol Roles" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#6c5ce7;strokeWidth=2;dashed=1;verticalAlign=top;fontStyle=1;fontSize=13;fontColor=#6c5ce7;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="95" width="1240" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="role-client" value="&lt;b&gt;Client&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Posts jobs, funds escrow&lt;br&gt;provides verification program&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#6c5ce7;fontColor=#ffffff;strokeColor=none;arcSize=20;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="110" y="125" width="200" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="role-provider" value="&lt;b&gt;Provider&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Bids, executes work&lt;br&gt;submits deliverables&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#6c5ce7;fontColor=#ffffff;strokeColor=none;arcSize=20;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="125" width="200" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="role-evaluator" value="&lt;b&gt;Evaluator&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Runs verification program&lt;br&gt;settles jobs&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#6c5ce7;fontColor=#ffffff;strokeColor=none;arcSize=20;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="700" y="125" width="200" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="role-arbitrator" value="&lt;b&gt;Arbitrator&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Resolves disputes&lt;br&gt;via independent re-evaluation&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#6c5ce7;fontColor=#ffffff;strokeColor=none;arcSize=20;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="125" width="200" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows from roles to core layer -->
+        <mxCell id="arrow-client" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6c5ce7;strokeWidth=1.5;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.15;entryY=0;entryDx=0;entryDy=0;endArrow=block;endFill=1;" edge="1" parent="1" source="role-client" target="core-group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-provider" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6c5ce7;strokeWidth=1.5;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.38;entryY=0;entryDx=0;entryDy=0;endArrow=block;endFill=1;" edge="1" parent="1" source="role-provider" target="core-group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-evaluator" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6c5ce7;strokeWidth=1.5;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.62;entryY=0;entryDx=0;entryDy=0;endArrow=block;endFill=1;" edge="1" parent="1" source="role-evaluator" target="core-group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-arbitrator" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6c5ce7;strokeWidth=1.5;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.85;entryY=0;entryDx=0;entryDy=0;endArrow=block;endFill=1;" edge="1" parent="1" source="role-arbitrator" target="core-group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== -->
+        <!-- CORE PROTOCOL LAYER -->
+        <!-- ======================== -->
+        <mxCell id="core-group" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8f9fa;strokeColor=#2d3436;strokeWidth=2;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="80" y="220" width="1240" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="core-label" value="AACP Core Protocol" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=15;fontStyle=1;fontColor=#2d3436;" vertex="1" parent="1">
+          <mxGeometry x="100" y="228" width="250" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== -->
+        <!-- IDENTITY LAYER (Left) -->
+        <!-- ======================== -->
+        <mxCell id="identity-group" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dfe6e9;strokeColor=#0984e3;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="110" y="270" width="340" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="identity-label" value="Identity &amp; Reputation" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#0984e3;" vertex="1" parent="1">
+          <mxGeometry x="170" y="278" width="220" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="erc8004" value="&lt;b&gt;ERC-8004&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Trustless Agent Standard&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0984e3;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="135" y="315" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="reputation-reg" value="&lt;b&gt;Reputation Registry&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;On-chain scoring&lt;br&gt;5-factor weighted&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0984e3;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="290" y="315" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="agent-nft" value="&lt;b&gt;Agent NFT&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;On-chain identity&lt;br&gt;Capability declaration&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#74b9ff;fontColor=#2d3436;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="135" y="385" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="rep-score" value="&lt;b&gt;Reputation Score&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;0-100, initial 50&lt;br&gt;Affects lock amount&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#74b9ff;fontColor=#2d3436;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="290" y="385" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-8004-nft" style="rounded=1;strokeColor=#0984e3;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="erc8004" target="agent-nft">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-rep-score" style="rounded=1;strokeColor=#0984e3;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="reputation-reg" target="rep-score">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sybil" value="&lt;font style=&quot;font-size:10px&quot;&gt;Sybil Resistance&lt;br&gt;Cold start: score 50 → 2x lock&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffeaa7;fontColor=#2d3436;strokeColor=#fdcb6e;arcSize=15;" vertex="1" parent="1">
+          <mxGeometry x="185" y="452" width="200" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== -->
+        <!-- COMMERCE LAYER (Center) -->
+        <!-- ======================== -->
+        <mxCell id="commerce-group" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dfe6e9;strokeColor=#00b894;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="480" y="270" width="340" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="commerce-label" value="Commerce &amp; Escrow" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#00b894;" vertex="1" parent="1">
+          <mxGeometry x="550" y="278" width="200" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="erc8183" value="&lt;b&gt;ERC-8183&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Agentic Commerce Protocol&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#00b894;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="505" y="315" width="145" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="aacphook" value="&lt;b&gt;AACPHook&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Lifecycle hooks&lt;br&gt;Staking ↔ Job binding&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#00b894;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="665" y="315" width="135" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="usdc-escrow" value="&lt;b&gt;USDC Escrow&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Programmable payments&lt;br&gt;Auto-settlement&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55efc4;fontColor=#2d3436;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="505" y="385" width="145" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="fee-dist" value="&lt;b&gt;Fee Distribution&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Provider 94% · Evaluator 4%&lt;br&gt;Treasury 2%&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55efc4;fontColor=#2d3436;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="665" y="385" width="135" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-8183-escrow" style="rounded=1;strokeColor=#00b894;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="erc8183" target="usdc-escrow">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-hook-fee" style="rounded=1;strokeColor=#00b894;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="aacphook" target="fee-dist">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="job-states" value="&lt;font style=&quot;font-size:10px&quot;&gt;Open → Funded → Submitted → Completed&lt;br&gt;↳ Rejected / Expired / Disputed → Arbitrated&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffeaa7;fontColor=#2d3436;strokeColor=#fdcb6e;arcSize=15;" vertex="1" parent="1">
+          <mxGeometry x="510" y="452" width="290" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== -->
+        <!-- STAKING LAYER (Right) -->
+        <!-- ======================== -->
+        <mxCell id="staking-group" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dfe6e9;strokeColor=#e17055;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="850" y="270" width="440" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="staking-label" value="Staking Pool &amp; Dispute Resolution" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#e17055;" vertex="1" parent="1">
+          <mxGeometry x="920" y="278" width="300" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="staking-pool" value="&lt;b&gt;AACPStaking&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Persistent Staking Pool&lt;br&gt;deposit / lock / unlock / withdraw&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e17055;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="875" y="315" width="185" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="dispute" value="&lt;b&gt;AACPDispute&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;VRF arbitrator selection&lt;br&gt;Commit-reveal voting&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e17055;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="315" width="185" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="pool-detail" value="&lt;b&gt;Available&lt;/b&gt; — free balance&lt;br&gt;&lt;b&gt;Locked&lt;/b&gt; — committed to jobs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fab1a0;fontColor=#2d3436;strokeColor=none;arcSize=15;shadow=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="875" y="390" width="185" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="slash-engine" value="&lt;b&gt;Progressive Slashing&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;1st offense: 30-70%&lt;br&gt;Repeat (3+): up to 100%&lt;br&gt;Collusion: 100% + ban&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fab1a0;fontColor=#2d3436;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="385" width="185" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-pool-detail" style="rounded=1;strokeColor=#e17055;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="staking-pool" target="pool-detail">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-dispute-slash" style="rounded=1;strokeColor=#e17055;strokeWidth=1.5;endArrow=block;endFill=1;" edge="1" parent="1" source="dispute" target="slash-engine">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="slash-dist" value="&lt;font style=&quot;font-size:10px&quot;&gt;Slash distribution: 60% injured party · 30% treasury · 10% arbitrators&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffeaa7;fontColor=#2d3436;strokeColor=#fdcb6e;arcSize=15;" vertex="1" parent="1">
+          <mxGeometry x="910" y="455" width="340" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Bidirectional arrows between layers -->
+        <mxCell id="arrow-id-commerce" style="rounded=1;strokeColor=#636e72;strokeWidth=2;endArrow=block;endFill=1;startArrow=block;startFill=1;" edge="1" parent="1" source="identity-group" target="commerce-group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-commerce-staking" style="rounded=1;strokeColor=#636e72;strokeWidth=2;endArrow=block;endFill=1;startArrow=block;startFill=1;" edge="1" parent="1" source="commerce-group" target="staking-group">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== -->
+        <!-- VERIFICATION LAYER (Bottom) -->
+        <!-- ======================== -->
+        <mxCell id="verify-group" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dfe6e9;strokeColor=#a29bfe;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="110" y="520" width="1180" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="verify-label" value="Verification Layer" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#6c5ce7;" vertex="1" parent="1">
+          <mxGeometry x="580" y="528" width="200" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="level-l0" value="&lt;b&gt;L0 — Manual&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Evaluator's judgment&lt;br&gt;Trust: Evaluator&lt;br&gt;Fee: 3%&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#a29bfe;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="140" y="563" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="level-l1" value="&lt;b&gt;L1 — TEE&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;SGX / Nitro enclave&lt;br&gt;Trust: Hardware vendor&lt;br&gt;Fee: 3% · Lock -10%&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#a29bfe;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="370" y="563" width="210" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="level-l2" value="&lt;b&gt;L2 — zkVM&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;SP1 / RISC Zero&lt;br&gt;Trust: Mathematics&lt;br&gt;Fee: 4% · Lock -20%&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#a29bfe;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="610" y="563" width="210" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="level-l3" value="&lt;b&gt;L3 — TEE + zkVM&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Dual proof · Defense in depth&lt;br&gt;Trust: Math + Hardware&lt;br&gt;Fee: 4% · Lock -30%&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#6c5ce7;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="850" y="563" width="220" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="verify-onchain" value="&lt;b&gt;On-chain Verifiers&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Groth16Verifier · TeeAttestationVerifier (Automata DCAP)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dfe6e9;fontColor=#6c5ce7;strokeColor=#a29bfe;strokeWidth=1.5;arcSize=15;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="568" width="170" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== -->
+        <!-- INFRASTRUCTURE (Bottom) -->
+        <!-- ======================== -->
+        <mxCell id="infra-group" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dfe6e9;strokeColor=#636e72;strokeWidth=2;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="110" y="690" width="1180" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="infra-label" value="Deployment &amp; Infrastructure" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=14;fontStyle=1;fontColor=#636e72;" vertex="1" parent="1">
+          <mxGeometry x="530" y="698" width="300" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="chain-base" value="&lt;b&gt;Base&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Primary chain&lt;br&gt;~$0.004/proof&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#636e72;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="140" y="735" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="chain-bsc" value="&lt;b&gt;BNB Chain&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Secondary chain&lt;br&gt;DeFi ecosystem&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#636e72;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="330" y="735" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="chain-eth" value="&lt;b&gt;Ethereum&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Settlement layer&lt;br&gt;High-value jobs&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#636e72;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="735" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="paas" value="&lt;b&gt;Prover-as-a-Service&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;GPU prover cluster&lt;br&gt;SP1 / RISC Zero&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#636e72;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="730" y="735" width="170" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="tee-hosting" value="&lt;b&gt;TEE Hosting&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Managed enclaves&lt;br&gt;AWS Nitro / SGX&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#636e72;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="930" y="735" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="treasury" value="&lt;b&gt;AACPTreasury&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Fee collection&lt;br&gt;Bonus distribution&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#636e72;fontColor=#ffffff;strokeColor=none;arcSize=15;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="735" width="150" height="55" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -22,6 +22,10 @@ No middlemen. No trust required. Just math, hardware isolation, and game theory.
 | Confidentiality | [TEE](https://docs.ata.network) (SGX / Nitro) | Hardware-isolated computation |
 | Economics | AACP Staking Pool + Slashing | Incentive alignment via skin in the game |
 
+### Architecture
+
+![AACP Architecture](assets/aacp-architecture.png)
+
 ### How It Works
 
 ```

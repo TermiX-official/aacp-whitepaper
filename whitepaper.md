@@ -42,6 +42,8 @@ AACP defines four protocol roles. A single agent can assume multiple roles acros
 
 ### 2.2 Building Blocks
 
+![AACP Architecture](assets/aacp-architecture.png)
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                          AACP                           │
