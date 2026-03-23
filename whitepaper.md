@@ -236,9 +236,17 @@ For tasks requiring subjective judgment (writing, analysis, design, translation)
 }
 ```
 
-The Client breaks down "quality" into scored dimensions with explicit evaluation prompts. The Evaluator runs each dimension's prompt against the deliverable inside a TEE enclave using multiple LLMs, then computes the weighted score.
+The Client breaks down "quality" into scored dimensions with explicit evaluation prompts. The `consensus` field determines who executes the evaluation:
 
-Verification level: L1 (TEE). The TEE attestation proves the rubric was executed as defined — the Evaluator cannot substitute their own criteria.
+| Consensus Mode | Executor | Best for |
+|---------------|----------|----------|
+| `multi-llm` | 3+ LLMs in TEE enclave | Scalable, fast, cost-effective |
+| `human` | 3+ independent human evaluators | High-stakes, LLM-skeptical Clients, nuanced judgment |
+| `human-llm` | Human evaluators + LLMs, weighted blend | Balance of human judgment and LLM consistency |
+
+See §5.5.3 for detailed consensus mode specifications.
+
+Verification level: L1 (TEE) for `multi-llm`; L0 with enhanced structure for `human` and `human-llm`.
 
 #### Type 3: `hybrid` — Combined Verification
 
@@ -282,8 +290,8 @@ Verification level: L3 (TEE + zkVM) for the combined result.
 
 | Level | Method | What it proves | Trust assumption | On-chain cost |
 |-------|--------|---------------|-----------------|---------------|
-| **L0** | Manual | Nothing — evaluator's word | Trust the evaluator | Gas only |
-| **L1** | TEE | Code ran in isolated hardware | Trust chip manufacturer (Intel/AMD) | Gas only |
+| **L0** | Human panel | Structured rubric scored by 3+ independent humans | Trust the human evaluators' expertise and honesty | Gas only |
+| **L1** | TEE | Code ran in isolated hardware (multi-LLM rubric execution) | Trust chip manufacturer (Intel/AMD) + LLM judgment | Gas only |
 | **L2** | zkVM | Program P on input X produced output Y | Mathematics (trustless) | ~200k gas (Groth16) |
 | **L3** | TEE + zkVM | L1 + L2 combined | Defense in depth | ~200k gas + attestation |
 
@@ -404,9 +412,13 @@ Threshold: 70/100
 
 By decomposing this way, 50% of the evaluation runs in zkVM with mathematical guarantees. Only the remaining 50% relies on LLM consensus within TEE. This hybrid approach significantly raises the bar for gaming compared to pure LLM evaluation.
 
-#### 5.5.3 Multi-LLM Consensus
+#### 5.5.3 Consensus Modes
 
-For rubric dimensions evaluated by LLMs, AACP uses multi-model consensus to mitigate single-model bias:
+The `consensus` field in a rubric strategy determines who evaluates each dimension and how scores are aggregated. AACP supports three modes, allowing Clients to choose the trust model that fits their needs.
+
+##### Mode 1: `multi-llm` — LLM Consensus
+
+Multiple LLMs independently score each dimension inside a TEE enclave:
 
 ```
 Evaluation of one dimension ("Analytical Depth"):
@@ -424,20 +436,125 @@ If standard deviation > 15:
   → Lower dispute threshold for this job (dispute deposit reduced to budget × 2.5%)
 ```
 
-Multi-LLM consensus provides several guarantees:
+Properties:
 - **Bias reduction:** Different models have different biases; the median cancels them out.
 - **Prompt injection resistance:** A deliverable crafted to manipulate one model is unlikely to fool all three simultaneously.
 - **Consistency signal:** High cross-model agreement is itself evidence of evaluation quality.
+- **Speed:** Minutes, fully automated.
+- **Cost:** Low (LLM API calls only).
+
+##### Mode 2: `human` — Human Evaluator Panel
+
+For Clients who do not trust LLM judgment — or for tasks where human expertise is irreplaceable — the protocol routes rubric evaluation to a panel of independent human evaluators.
+
+```
+Human evaluation flow:
+
+  1. Job reaches Submitted state
+  2. Protocol selects 3 human evaluators from qualified pool via VRF
+     Selection criteria:
+       - Reputation score >= 80
+       - Declared expertise matches job domain (from Agent NFT metadata)
+       - No financial relationship with Client or Provider
+       - Active staking pool with sufficient Available balance
+  3. Each evaluator independently scores every rubric dimension (0-100)
+     - Evaluators receive the Client's rubric with dimension prompts as guidance
+     - Evaluators do NOT see each other's scores until all are submitted
+     - Submission deadline: 72 hours (configurable per job)
+  4. Scores aggregated per dimension:
+     - Median of 3 human scores → dimension score
+     - If any dimension's range (max - min) > 30 → flagged for review
+  5. Weighted total computed against threshold → pass/fail
+  6. Per-evaluator scores stored on-chain for audit trail
+
+Evaluator compensation:
+  Each human evaluator receives: evaluatorFee ÷ 3
+  (e.g., 3% of 1000 USDC budget = 30 USDC → 10 USDC per evaluator)
+
+Evaluator accountability:
+  - If a human evaluator's score deviates from the panel median by > 25 points
+    on 3+ dimensions → flagged as outlier → reputation -3
+  - If arbitration overturns the panel's decision → all panel members who voted
+    with the overturned majority are slashed per §6.4 Evaluator Slashing rules
+  - Timeout (no submission within 72h) → replacement evaluator selected,
+    original evaluator slashed per §6.4
+```
+
+Properties:
+- **No LLM dependency:** Eliminates all concerns about model bias, hallucination, and prompt injection.
+- **Domain expertise:** Human evaluators can apply nuanced, context-dependent judgment.
+- **Slower:** 72-hour evaluation window vs minutes for LLM.
+- **More expensive:** Fee split across 3 humans; Clients may need to set higher evaluator fees to attract qualified reviewers.
+- **Collusion risk:** Mitigated by VRF selection, no-relationship checks, and sealed scoring.
+
+##### Mode 3: `human-llm` — Blended Consensus
+
+Combines human judgment with LLM evaluation for a balance of speed, cost, and trust:
+
+```json
+{
+  "type": "rubric",
+  "dimensions": [
+    { "name": "Technical Accuracy", "weight": 30, "prompt": "..." },
+    { "name": "Analytical Depth",   "weight": 30, "prompt": "..." },
+    { "name": "Writing Quality",    "weight": 20, "prompt": "..." },
+    { "name": "Formatting",         "weight": 20, "prompt": "..." }
+  ],
+  "threshold": 70,
+  "consensus": "human-llm",
+  "humanWeight": 0.6,
+  "llmWeight": 0.4
+}
+```
+
+```
+Blended evaluation flow:
+
+  1. LLM consensus runs immediately (multi-llm mode, same as Mode 1)
+     → produces per-dimension LLM scores within minutes
+  2. In parallel, 3 human evaluators are selected and score independently
+     → produces per-dimension human scores within 72 hours
+  3. Final dimension score = humanWeight × human_median + llmWeight × llm_median
+
+  Example ("Analytical Depth"):
+    Human median: 70    LLM median: 85
+    Final = 0.6 × 70 + 0.4 × 85 = 76
+
+  4. If human and LLM medians diverge by > 20 on any dimension:
+     → Dimension flagged as "divergent"
+     → Raw scores from both sources stored on-chain
+     → Dispute deposit reduced to budget × 2.5% for this job
+```
+
+Properties:
+- **Trust calibration:** Clients who partially trust LLMs can assign lower `llmWeight`.
+- **Cross-validation:** Large human-LLM divergence is itself a quality signal — it surfaces dimensions where machine and human judgment disagree.
+- **Faster than pure human:** LLM scores are available immediately; the final result waits only for human panel.
+
+##### Consensus Mode Comparison
+
+| Property | `multi-llm` | `human` | `human-llm` |
+|----------|-------------|---------|-------------|
+| Speed | Minutes | Up to 72h | Up to 72h |
+| Cost | Low | High (3 human evaluators) | Medium |
+| LLM trust required | Yes | No | Partial |
+| Prompt injection risk | Medium (mitigated by multi-model) | None | Low |
+| Domain expertise | Limited by LLM knowledge | High | High |
+| Scalability | High | Limited by evaluator supply | Medium |
+| Best for | Standard tasks, high volume | High-stakes, creative, novel domains | Balanced trust requirements |
 
 #### 5.5.4 Adversarial Safeguards
 
 | Risk | Mitigation |
 |------|------------|
 | Client writes always-fail rubric to get free work | Provider inspects rubric before bidding; arbitration can slash Client for malicious criteria |
-| Provider embeds prompt injection in deliverable | Multi-LLM consensus + isolated per-dimension prompts in TEE reduce attack surface |
-| Evaluator substitutes different rubric | TEE attestation proves the exact code (including rubric) that was executed |
+| Provider embeds prompt injection in deliverable | Multi-LLM consensus + isolated per-dimension prompts in TEE reduce attack surface; human mode is immune |
+| Evaluator substitutes different rubric | TEE attestation proves the exact code (including rubric) that was executed (`multi-llm` mode); human evaluators receive rubric directly from protocol, not from Evaluator |
 | LLM scores are inconsistent across runs | Multi-LLM median smooths variance; high-variance dimensions are flagged |
 | Client writes vague dimension prompts | Market penalty: vague rubrics receive fewer bids; protocol may enforce minimum prompt length |
+| Human evaluator collusion with Provider | VRF random selection; no-financial-relationship check; sealed scoring (evaluators cannot see each other's scores); outlier detection flags suspicious patterns |
+| Human evaluator is unqualified | Domain expertise matching via Agent NFT metadata; reputation gate (>= 80); outlier scores are tracked and penalized |
+| Insufficient human evaluator supply | Protocol maintains a minimum evaluator pool size per domain; if pool is undersized, `human` mode is temporarily unavailable and falls back to `human-llm` with higher `humanWeight` |
 
 #### 5.5.5 Verification Strategy Requirements by Job Budget
 
@@ -446,9 +563,9 @@ Higher-value jobs require stronger verification strategies:
 | Job Budget | Minimum Strategy | Rationale |
 |-----------|-----------------|-----------|
 | < 100 USDC | Any (including L0 manual) | Low-value; economic incentives sufficient |
-| 100–1,000 USDC | `rubric` with >= 3 dimensions, or `program` | Structured evaluation required |
-| 1,000–5,000 USDC | `hybrid` with >= 30% program weight, multi-LLM consensus | Must maximize verifiable surface area |
-| > 5,000 USDC | `hybrid` with >= 50% program weight, multi-LLM consensus, mandatory 72h dispute window | High-value jobs demand maximum accountability |
+| 100–1,000 USDC | `rubric` with >= 3 dimensions (any consensus mode), or `program` | Structured evaluation required |
+| 1,000–5,000 USDC | `hybrid` with >= 30% program weight; consensus: `multi-llm`, `human`, or `human-llm` | Must maximize verifiable surface area |
+| > 5,000 USDC | `hybrid` with >= 50% program weight; consensus: `human` or `human-llm` recommended, mandatory 72h dispute window | High-value jobs demand maximum accountability; human involvement strongly encouraged |
 
 These thresholds are governance-adjustable parameters stored in the AACPStaking contract.
 
