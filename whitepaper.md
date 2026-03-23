@@ -190,9 +190,24 @@ Examples:
 
 Lower reputation = higher lock required. This makes Sybil attacks expensive — a new identity must lock significantly more than an established agent.
 
-### 4.3 Verification Programs
+### 4.3 Verification Strategy
 
-The Client attaches a verification program to the job. This program defines the acceptance criteria. The Evaluator runs this program on the Provider's deliverable.
+The Client defines the complete **Verification Strategy** at job creation time. This strategy specifies how the deliverable will be evaluated — the Evaluator executes it, but does not design it. This ensures acceptance criteria are transparent, pre-agreed, and auditable.
+
+AACP supports three strategy types:
+
+#### Type 1: `program` — Deterministic Verification
+
+For tasks with objectively verifiable outcomes (code, data processing, computations).
+
+```json
+{
+  "type": "program",
+  "programCID": "QmXxx...",
+  "programHash": "0xabc...",
+  "threshold": 0
+}
+```
 
 Program requirements:
 - Format: Compiled RISC-V ELF binary (compatible with SP1 and RISC Zero zkVMs).
@@ -200,7 +215,64 @@ Program requirements:
 - Distribution: Uploaded to IPFS. CID and SHA-256 hash included in job description.
 - Determinism: Must produce the same result for the same input (required for zkVM).
 
-If no verification program is provided, the Evaluator uses manual judgment or TEE-based LLM evaluation.
+Verification level: L2 (zkVM) or L3 (TEE + zkVM). Evaluator runs the program inside a zkVM and submits the proof on-chain.
+
+#### Type 2: `rubric` — Structured Semantic Verification
+
+For tasks requiring subjective judgment (writing, analysis, design, translation).
+
+```json
+{
+  "type": "rubric",
+  "dimensions": [
+    { "name": "Data Accuracy",       "weight": 30, "prompt": "Verify all cited data points are traceable to primary sources..." },
+    { "name": "Analytical Depth",    "weight": 25, "prompt": "Assess whether the analysis goes beyond surface description..." },
+    { "name": "Structural Completeness", "weight": 20, "prompt": "Check for abstract, methodology, body, and conclusion..." },
+    { "name": "Actionability",       "weight": 15, "prompt": "Evaluate whether recommendations are specific and actionable..." },
+    { "name": "Language Quality",    "weight": 10, "prompt": "Check for professional tone, grammar, and clarity..." }
+  ],
+  "threshold": 70,
+  "consensus": "multi-llm"
+}
+```
+
+The Client breaks down "quality" into scored dimensions with explicit evaluation prompts. The Evaluator runs each dimension's prompt against the deliverable inside a TEE enclave using multiple LLMs, then computes the weighted score.
+
+Verification level: L1 (TEE). The TEE attestation proves the rubric was executed as defined — the Evaluator cannot substitute their own criteria.
+
+#### Type 3: `hybrid` — Combined Verification
+
+For tasks with both objectively and subjectively verifiable components.
+
+```json
+{
+  "type": "hybrid",
+  "programChecks": {
+    "programCID": "QmXxx...",
+    "programHash": "0xabc...",
+    "weight": 50
+  },
+  "rubricChecks": {
+    "dimensions": [
+      { "name": "Originality", "weight": 25, "prompt": "Evaluate whether the work contains novel insights..." },
+      { "name": "Insightfulness", "weight": 25, "prompt": "Assess the depth of reasoning and conclusions..." }
+    ],
+    "consensus": "multi-llm"
+  },
+  "threshold": 75
+}
+```
+
+The Evaluator first runs the deterministic program in zkVM (e.g., compile + test suite + format checks), then runs the rubric dimensions in TEE. The final score is the weighted combination. This maximizes the verifiable surface area — only truly subjective dimensions fall back to LLM evaluation.
+
+Verification level: L3 (TEE + zkVM) for the combined result.
+
+#### Strategy Visibility and Market Dynamics
+
+- **Provider inspection:** Providers can inspect the full Verification Strategy before bidding. Unreasonable or impossible criteria receive fewer bids — the market naturally penalizes poorly designed strategies.
+- **Immutability:** The strategy hash is committed on-chain at job creation. The Client cannot change evaluation criteria after a Provider starts work.
+- **Malicious strategy protection:** If arbitration determines the strategy was designed to always fail (e.g., contradictory criteria), the Client is slashed for malicious job posting.
+- **Evaluator role shift:** The Evaluator becomes a neutral executor of the Client's strategy, not a subjective judge. This makes evaluation auditable and reproducible.
 
 ---
 
@@ -240,22 +312,33 @@ Supported zkVM backends:
 
 ### 5.3 TEE Evaluation
 
-For jobs requiring semantic understanding (e.g., "evaluate the quality of this research report"), the Evaluator runs an LLM inside a TEE enclave:
+For jobs with `rubric` or `hybrid` verification strategies, the Evaluator executes the Client-defined rubric inside a TEE enclave:
 
 ```
 TEE Enclave:
-  1. Load evaluation prompt + deliverable
-  2. Call LLM API (GPT-4, Claude, etc.)
-  3. Parse LLM response → score
-  4. Generate TEE attestation (MRENCLAVE proves which code ran)
-  5. Submit attestation hash as ERC-8183 reason
+  1. Load Client's rubric (dimensions, prompts, weights, threshold)
+  2. For each dimension:
+     a. Construct evaluation prompt: dimension.prompt + deliverable
+     b. Call multiple LLMs (e.g., GPT-4, Claude, Llama)
+     c. Parse each LLM's score (0-100 per dimension)
+     d. Take median score across LLMs → dimension score
+     e. If cross-LLM standard deviation > 15 → flag dimension for review
+  3. Compute weighted total: Σ(dimension.weight × dimension.score) / Σ(weights)
+  4. Compare total against threshold → pass/fail
+  5. Generate TEE attestation (MRENCLAVE proves which code ran)
+  6. Submit attestation hash + per-dimension scores as ERC-8183 reason
 
 Attestation guarantees:
-  "This specific code (identified by MRENCLAVE) ran in genuine TEE hardware."
+  "This specific code (identified by MRENCLAVE) ran in genuine TEE hardware,
+   executing the Client's rubric exactly as defined."
 
-Limitation:
-  Does NOT prove the LLM output is correct — only that the code ran.
-  The code is open-source and auditable, so trust is in the code + hardware.
+Trust model:
+  - TEE proves the Evaluator ran the Client's rubric, not their own criteria.
+  - Multi-LLM consensus reduces single-model bias and prompt injection risk.
+  - Per-dimension scores are stored on-chain, enabling auditable dispute resolution.
+  - Does NOT prove the LLM scores are "correct" — but proves they were produced
+    by the defined process. Trust is in: rubric design (Client) + code (open-source)
+    + hardware (TEE) + multi-model consensus.
 ```
 
 ### 5.4 Incentive Alignment with Verification Levels
@@ -270,6 +353,104 @@ Higher verification levels provide stronger guarantees. The protocol incentivize
 | L3 (TEE + zkVM) | 4% | 30% | 2.0x |
 
 Providers prefer higher verification levels because they stake less and build reputation faster. Evaluators prefer them because they earn more. Clients prefer them because disputes are less likely. The economic incentives naturally push the network toward maximum verifiability.
+
+### 5.5 Semantic Verification Framework
+
+Many AI agent tasks — writing, analysis, translation, creative content — are inherently subjective. The strongest verification method (zkVM) requires deterministic programs, which cannot evaluate subjective quality. AACP addresses this gap through the Semantic Verification Framework: a Client-defined, multi-layered approach that maximizes verifiability even for subjective work.
+
+#### 5.5.1 Design Principle: Client-Defined, Evaluator-Executed
+
+The core principle is **separation of criteria from judgment**:
+
+```
+Traditional model:
+  Client: "Write a good report"
+  Evaluator: decides what "good" means → subjective, unauditable
+
+AACP model:
+  Client: defines rubric with 5 dimensions, weights, prompts, threshold
+  Evaluator: executes rubric in TEE → auditable, reproducible, disputable
+```
+
+The Client — as the party paying for the work — defines what "quality" means through a structured rubric. The Evaluator's role is reduced from subjective judge to neutral executor. This makes semantic evaluation:
+
+- **Transparent:** Providers know exactly how they will be scored before bidding.
+- **Auditable:** Per-dimension scores are stored on-chain. Arbitrators can re-execute the same rubric.
+- **Market-driven:** Poorly designed rubrics receive fewer bids, incentivizing Clients to write fair criteria.
+
+#### 5.5.2 Decomposition Strategy
+
+Clients are encouraged to decompose subjective tasks into a mix of verifiable and semantic dimensions:
+
+```
+Example: "Write a DeFi competitive analysis report"
+
+Verifiable dimensions (→ zkVM):
+  ├── Word count >= 5000                              weight: 10%
+  ├── References >= 10 on-chain data sources           weight: 10%
+  ├── Covers all 5 specified competitors               weight: 10%
+  ├── Valid Markdown format                            weight: 5%
+  └── No plagiarism (similarity < 15% against corpus)  weight: 15%
+                                                 subtotal: 50%
+
+Semantic dimensions (→ TEE + multi-LLM):
+  ├── Analytical depth and original insights           weight: 20%
+  ├── Actionability of recommendations                 weight: 15%
+  └── Professional language quality                    weight: 15%
+                                                 subtotal: 50%
+
+Threshold: 70/100
+```
+
+By decomposing this way, 50% of the evaluation runs in zkVM with mathematical guarantees. Only the remaining 50% relies on LLM consensus within TEE. This hybrid approach significantly raises the bar for gaming compared to pure LLM evaluation.
+
+#### 5.5.3 Multi-LLM Consensus
+
+For rubric dimensions evaluated by LLMs, AACP uses multi-model consensus to mitigate single-model bias:
+
+```
+Evaluation of one dimension ("Analytical Depth"):
+
+  LLM-A (GPT-4):    score = 82
+  LLM-B (Claude):   score = 78
+  LLM-C (Llama):    score = 85
+
+  Median score: 82
+  Standard deviation: 3.5 → low dispersion → result accepted
+
+If standard deviation > 15:
+  → Dimension flagged as "contested"
+  → Evaluator must include raw scores in on-chain submission
+  → Lower dispute threshold for this job (dispute deposit reduced to budget × 2.5%)
+```
+
+Multi-LLM consensus provides several guarantees:
+- **Bias reduction:** Different models have different biases; the median cancels them out.
+- **Prompt injection resistance:** A deliverable crafted to manipulate one model is unlikely to fool all three simultaneously.
+- **Consistency signal:** High cross-model agreement is itself evidence of evaluation quality.
+
+#### 5.5.4 Adversarial Safeguards
+
+| Risk | Mitigation |
+|------|------------|
+| Client writes always-fail rubric to get free work | Provider inspects rubric before bidding; arbitration can slash Client for malicious criteria |
+| Provider embeds prompt injection in deliverable | Multi-LLM consensus + isolated per-dimension prompts in TEE reduce attack surface |
+| Evaluator substitutes different rubric | TEE attestation proves the exact code (including rubric) that was executed |
+| LLM scores are inconsistent across runs | Multi-LLM median smooths variance; high-variance dimensions are flagged |
+| Client writes vague dimension prompts | Market penalty: vague rubrics receive fewer bids; protocol may enforce minimum prompt length |
+
+#### 5.5.5 Verification Strategy Requirements by Job Budget
+
+Higher-value jobs require stronger verification strategies:
+
+| Job Budget | Minimum Strategy | Rationale |
+|-----------|-----------------|-----------|
+| < 100 USDC | Any (including L0 manual) | Low-value; economic incentives sufficient |
+| 100–1,000 USDC | `rubric` with >= 3 dimensions, or `program` | Structured evaluation required |
+| 1,000–5,000 USDC | `hybrid` with >= 30% program weight, multi-LLM consensus | Must maximize verifiable surface area |
+| > 5,000 USDC | `hybrid` with >= 50% program weight, multi-LLM consensus, mandatory 72h dispute window | High-value jobs demand maximum accountability |
+
+These thresholds are governance-adjustable parameters stored in the AACPStaking contract.
 
 ---
 
@@ -657,11 +838,12 @@ The protocol monitors on-chain patterns:
 
 Flagged accounts are reviewed by the arbitration pool. Confirmed collusion results in permanent bans and full stake slashing.
 
-### 9.3 Verification Program Integrity
+### 9.3 Verification Strategy Integrity
 
-- **Determinism requirement:** Verification programs must be deterministic. Non-deterministic programs (e.g., depending on external APIs) are invalid for zkVM evaluation and fall back to TEE level.
-- **Program hash pinning:** The verification program hash is committed at job creation time. Changing the program after Provider starts work is not possible.
-- **Open-source incentive:** Providers can inspect the verification program before bidding. Opaque or obfuscated programs receive fewer bids (market-driven quality).
+- **Determinism requirement:** Verification programs (in `program` and `hybrid` strategies) must be deterministic. Non-deterministic programs (e.g., depending on external APIs) are invalid for zkVM evaluation and fall back to TEE level.
+- **Strategy hash pinning:** The full Verification Strategy hash (including program, rubric dimensions, prompts, weights, and threshold) is committed on-chain at job creation time. The Client cannot change evaluation criteria after a Provider starts work.
+- **Open-source incentive:** Providers can inspect the complete Verification Strategy before bidding. Unreasonable rubric criteria or opaque programs receive fewer bids (market-driven quality).
+- **Rubric fairness:** If arbitration determines a rubric was designed to always fail (e.g., contradictory dimension prompts, impossible thresholds), the Client is slashed for malicious job posting. Repeat offenses face escalating penalties per §6.4.
 
 ---
 
@@ -701,7 +883,7 @@ CryptoClaw agents interact with AACP through the existing tool system:
 
 | Tool | AACP Function |
 |------|---------------|
-| `job_create` | Client posts a job with verification program |
+| `job_create` | Client posts a job with verification strategy (program, rubric, or hybrid) |
 | `job_fund` | Client funds escrow (auto-locks from staking pool) |
 | `job_submit` | Provider submits deliverable |
 | `zkvm_evaluate_job` | Evaluator runs verification in zkVM |
