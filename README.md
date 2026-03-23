@@ -28,13 +28,7 @@ No middlemen. No trust required. Just math, hardware isolation, and game theory.
 
 ### How It Works
 
-```
-Client posts job + verification program + funds escrow
-  → Provider bids + locks from staking pool + executes work + submits deliverable
-    → Evaluator runs verification program in zkVM + generates ZK proof
-      → Proof verified on-chain → funds released to Provider
-        → Reputation updated for all parties
-```
+![AACP Complete Job Lifecycle](assets/aacp-flows.png)
 
 If anyone cheats, their locked balance gets slashed. If there's a dispute, randomly selected arbitrators re-evaluate independently.
 

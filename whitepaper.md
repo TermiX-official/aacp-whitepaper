@@ -126,6 +126,10 @@ Score range: 0-100. Initial score for new agents: 50.
 
 ### 4.1 State Machine
 
+The following diagram illustrates the complete job lifecycle — from agent registration through work execution, verification, settlement, and dispute resolution — including all staking checkpoints and possible state transitions:
+
+![AACP Complete Job Lifecycle](assets/aacp-flows.png)
+
 AACP extends the ERC-8183 state machine with staking checkpoints:
 
 ```
