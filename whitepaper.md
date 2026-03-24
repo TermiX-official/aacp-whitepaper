@@ -1173,9 +1173,247 @@ For `human` consensus mode, human panel members additionally cannot see each oth
 
 ---
 
-## 10. Deployment
+## 10. AACP Vault Extension — Capital-Entrusted Jobs
 
-### 10.1 Target Chains
+### 10.1 Motivation
+
+The core AACP protocol handles **payment-for-work** jobs: the Client funds escrow as compensation, and the Provider earns payment upon completion. However, a significant class of agent commerce requires **capital entrustment** — the Client provides capital for the Provider to operate with, not merely payment for labor.
+
+Examples:
+- **Portfolio management:** Client provides 1,000 USDC; Provider (AI agent) executes DeFi strategies to generate yield.
+- **On-chain procurement:** Client provides 500 USDC; Provider purchases NFTs, tokens, or protocol positions on the Client's behalf.
+- **Liquidity management:** Client provides capital; Provider optimizes liquidity positions across DEXes.
+
+In these scenarios, the Provider must be able to **use** the Client's capital (trade, swap, deposit) but must **never** be able to steal it. AACP addresses this through the Vault Extension — an independent module that layers on top of the core protocol.
+
+### 10.2 Architecture
+
+```
+┌──────────────────────────────────────────────────────┐
+│                  AACP Vault Extension                  │
+│                                                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │ StrategyVault│  │ Transaction  │  │  Settlement   │ │
+│  │              │←→│ Guard        │  │  Engine       │ │
+│  │ Holds Client │  │              │  │              │ │
+│  │ capital      │  │ Validates    │  │ Computes     │ │
+│  │              │  │ every tx     │  │ P&L + fees   │ │
+│  └──────┬───────┘  └──────────────┘  └──────────────┘ │
+│         │                                              │
+│         │ Uses AACP core for:                          │
+│         │ • Agent identity (ERC-8004)                  │
+│         │ • Reputation (AACPReputation)                │
+│         │ • Staking as collateral (AACPStaking)        │
+│         │ • Dispute resolution (AACPDispute)           │
+│         │ • Result verification (Groth16Verifier)      │
+│         │                                              │
+└─────────┼──────────────────────────────────────────────┘
+          │
+┌─────────▼──────────────────────────────────────────────┐
+│                    AACP Core Protocol                    │
+│  ERC-8004 · ERC-8183 · AACPStaking · AACPReputation    │
+│  AACPDispute · AACPTreasury · Groth16Verifier           │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 10.3 StrategyVault Contract
+
+The StrategyVault holds the Client's capital and provides the Provider with **restricted execution rights** — the ability to interact with whitelisted DeFi protocols without the ability to withdraw or transfer assets.
+
+```
+StrategyVault state:
+
+  client:          address     — Capital owner
+  provider:        address     — AI agent with execution rights
+  guard:           address     — TransactionGuard contract
+  capital:         uint256     — Initial capital deposited
+  stopLoss:        uint256     — Minimum allowed total value (e.g., 80% of capital)
+  targetReturn:    uint256     — Target return percentage (e.g., 10%)
+  deadline:        uint256     — Job deadline timestamp
+  performanceFee:  uint256     — Provider's share of excess returns (e.g., 30%)
+  managementFee:   uint256     — Fixed fee for Provider (paid via AACP Escrow)
+```
+
+**Core function — restricted execution:**
+
+```
+StrategyVault.execute(address target, bytes calldata data):
+
+  1. Require msg.sender == provider
+  2. Require block.timestamp < deadline
+  3. Require TransactionGuard.check(target, data) == true
+  4. Execute: target.call(data)
+  5. Require totalValue() >= stopLoss    ← post-execution check
+```
+
+The Provider calls `execute()` for every on-chain operation. The function forwards the call to the target protocol **only if** the TransactionGuard approves it and the post-execution portfolio value remains above the stop-loss threshold.
+
+### 10.4 TransactionGuard Contract
+
+The TransactionGuard enforces what the Provider can and cannot do with the Client's capital. It is configured at job creation time and cannot be modified after the Provider starts work.
+
+```
+TransactionGuard rules:
+
+  Whitelist (configurable per job):
+    allowedProtocols:    mapping(address => bool)
+    allowedFunctions:    mapping(address => mapping(bytes4 => bool))
+
+  Hardcoded restrictions (not configurable — always enforced):
+    ✗ ERC20.transfer() to any address not in allowedProtocols
+    ✗ ERC20.approve() to any address not in allowedProtocols
+    ✗ ERC721.transferFrom() out of the Vault
+    ✗ ERC1155.safeTransferFrom() out of the Vault
+    ✗ Any call to contracts not in allowedProtocols
+    ✗ Any delegatecall (prevents Vault logic hijacking)
+
+  Example whitelist for a DeFi yield job:
+    ✓ Uniswap V3 Router: exactInputSingle(), exactOutputSingle()
+    ✓ Aave V3 Pool: supply(), withdraw(), borrow(), repay()
+    ✓ Compound V3: supply(), withdraw()
+    ✓ Curve: exchange(), add_liquidity(), remove_liquidity()
+```
+
+**Security invariant:** The Provider can move assets **between** the Vault and whitelisted protocols, but assets can never leave the Vault's control perimeter (Vault + whitelisted protocols). The Guard's hardcoded restrictions ensure this regardless of the whitelist configuration.
+
+### 10.5 Job Lifecycle for Capital-Entrusted Jobs
+
+```
+1. Client creates capital-entrusted job
+   ├── Deposits capital into StrategyVault (e.g., 1,000 USDC)
+   ├── Configures Guard: whitelisted protocols + functions
+   ├── Sets parameters: stopLoss (800), targetReturn (10%), deadline (30 days),
+   │   performanceFee (30%)
+   ├── Funds management fee via standard AACP Escrow (e.g., 20 USDC)
+   ├── Attaches verification strategy:
+   │   type: program
+   │   program: "check if Vault totalValue >= capital * (1 + targetReturn)"
+   └── Client stake locked in AACPStaking (standard)
+
+2. Provider bids and is selected
+   ├── Provider inspects Guard whitelist and parameters before bidding
+   ├── Provider stake locked in AACPStaking (standard)
+   │   → Stake acts as collateral — slashed if Provider causes losses through
+   │     negligence or misconduct
+   └── Vault grants Provider execution rights
+
+3. Provider operates (duration: up to deadline)
+   ├── Calls vault.execute() to interact with DeFi protocols
+   ├── Every call validated by Guard + post-execution stop-loss check
+   ├── All operations are on-chain and fully transparent
+   └── If totalValue drops to stopLoss → Vault auto-revokes Provider access
+
+4. Settlement at deadline
+   ├── Vault calculates final totalValue (including all positions)
+   ├── Verification program runs in zkVM:
+   │   input: (initialCapital, finalValue, targetReturn)
+   │   exitCode: 0 if finalValue >= initialCapital * (1 + targetReturn), else 1
+   ├── ZK proof submitted on-chain
+   │
+   ├── If target met (e.g., finalValue = 1,150 USDC):
+   │   ├── Client receives: capital + targetReturn = 1,100 USDC
+   │   ├── Provider receives: excessReturn * performanceFee = 50 * 30% = 15 USDC
+   │   ├── Remaining excess: 50 * 70% = 35 USDC → Client
+   │   ├── Management fee: 20 USDC → Provider (from AACP Escrow)
+   │   ├── Platform fee: 2% of management fee → Treasury
+   │   └── Provider reputation updated positively
+   │
+   ├── If target not met but no loss (e.g., finalValue = 1,050 USDC):
+   │   ├── Client receives: all 1,050 USDC
+   │   ├── Provider receives: management fee only (20 USDC, reduced or zero
+   │   │   depending on job terms)
+   │   └── Provider reputation: neutral
+   │
+   └── If loss (e.g., finalValue = 900 USDC):
+       ├── Client receives: 900 USDC (from Vault) + slash compensation
+       ├── Provider stake slashed: proportional to loss severity
+       │   Loss 0-10%: slash 30% of locked amount
+       │   Loss 10-20%: slash 60% of locked amount
+       │   Loss >20%: slash 100% (stop-loss should have prevented this)
+       ├── Slash distribution: 80% to Client, 20% to Treasury
+       │   (higher Client share than standard jobs — Client lost capital)
+       ├── No management fee paid
+       └── Provider reputation: significant negative impact
+
+5. Dispute
+   ├── Standard AACP dispute mechanism applies
+   ├── Client can dispute if Provider made unauthorized operations
+   │   (Guard should prevent this, but edge cases may exist)
+   ├── Provider can dispute if stop-loss triggered incorrectly
+   │   (e.g., oracle price feed was wrong)
+   └── Arbitrators review on-chain transaction history + Guard logs
+```
+
+### 10.6 Stop-Loss Mechanism
+
+The stop-loss is enforced at two levels:
+
+```
+Level 1: Per-transaction (in StrategyVault.execute)
+  After every execute() call, check totalValue() >= stopLoss
+  If violated → revert the transaction
+  → Prevents any single operation from crossing the stop-loss
+
+Level 2: Market-driven (via Keeper/Automation)
+  External positions (e.g., Aave deposits) can lose value due to market movements
+  A Keeper (Chainlink Automation or similar) periodically checks totalValue()
+  If totalValue < stopLoss:
+    → Vault revokes Provider execution rights
+    → Vault enters wind-down mode: only unwinding positions is allowed
+    → Client can claim remaining assets after wind-down
+```
+
+### 10.7 Total Value Calculation
+
+The Vault must accurately compute the total value of all assets under its control, including positions in external protocols.
+
+```
+totalValue() =
+    USDC balance in Vault
+  + Value of ERC-20 tokens held (priced via Chainlink or TWAP oracles)
+  + Value of Aave deposits (aToken balances)
+  + Value of Compound positions
+  + Value of Uniswap LP positions (calculated from pool reserves)
+  - Outstanding borrows (Aave/Compound debt)
+
+Oracle requirements:
+  - Chainlink price feeds for major assets (ETH, BTC, etc.)
+  - Uniswap V3 TWAP for long-tail assets
+  - Staleness check: reject prices older than 1 hour
+```
+
+### 10.8 Security Considerations
+
+| Risk | Mitigation |
+|------|------------|
+| Provider drains capital through whitelisted protocol exploit | Guard only whitelists audited, established protocols; Vault limits maximum position size per protocol |
+| Oracle manipulation to fake totalValue | Use Chainlink + TWAP dual oracle; require multiple sources to agree within 5% |
+| Stop-loss not triggered due to rapid market crash | Keeper checks every block on high-value Vaults; insurance reserve in Treasury for black swan events |
+| Provider front-runs Client's capital with personal funds | All Provider transactions are on-chain and auditable; statistical analysis can detect front-running patterns |
+| Guard whitelist too permissive | Client configures whitelist; Providers can inspect before bidding; protocol provides recommended safe defaults |
+| Vault contract vulnerability | Independent audit required; UUPS upgradeable; capped capital per Vault during initial deployment |
+
+### 10.9 Relationship to Core AACP
+
+The Vault Extension is an **optional, independent module**. It does not modify any core AACP contract. It integrates with the core protocol through standard interfaces:
+
+| Core AACP Component | How Vault Uses It |
+|---------------------|-------------------|
+| ERC-8004 (Identity) | Provider must have Agent NFT; reputation tracks capital management history |
+| AACPStaking | Provider locks stake as collateral against Client capital loss |
+| AACPReputation | Capital management outcomes (returns, losses) feed into reputation score |
+| AACPDispute | Standard dispute mechanism for contested settlements |
+| Groth16Verifier | Verifies return calculation (initialValue, finalValue, targetReturn) |
+| AACPTreasury | Receives platform fee on management fees + share of loss-related slashing |
+| ERC-8183 | Management fee component uses standard job escrow |
+
+Agents that only do standard work-for-payment jobs never interact with the Vault Extension. Agents that want to offer capital management services opt-in by integrating with the StrategyVault.
+
+---
+
+## 11. Deployment
+
+### 11.1 Target Chains
 
 AACP contracts will be deployed on EVM-compatible chains that support the BN254 pairing precompile (required for Groth16 proof verification):
 
@@ -1185,7 +1423,7 @@ AACP contracts will be deployed on EVM-compatible chains that support the BN254 
 | BNB Chain (BSC) | Secondary | Large DeFi ecosystem, low gas, existing CryptoClaw user base |
 | Ethereum | Settlement | High-value jobs, maximum security, canonical ERC-8004 registry |
 
-### 10.2 Contract Architecture
+### 11.2 Contract Architecture
 
 ```
 Existing (already deployed):
@@ -1203,7 +1441,7 @@ New (AACP-specific):
   AACPHook                      — ERC-8183 Hook connecting staking checks to job lifecycle
 ```
 
-### 10.3 Integration with CryptoClaw
+### 11.3 Integration with CryptoClaw
 
 CryptoClaw agents interact with AACP through the existing tool system:
 
@@ -1222,7 +1460,7 @@ Agents can operate fully autonomously — discovering jobs, bidding, executing, 
 
 ---
 
-## 11. Roadmap
+## 12. Roadmap
 
 ### Phase 1: Foundation (Q2 2026)
 - Deploy AACPStaking (persistent staking pool) and AACPHook on Base Sepolia testnet
@@ -1250,29 +1488,29 @@ Agents can operate fully autonomously — discovering jobs, bidding, executing, 
 
 ---
 
-## 12. Security Considerations
+## 13. Security Considerations
 
-### 12.1 Smart Contract Security
+### 13.1 Smart Contract Security
 - All contracts will undergo third-party audit before mainnet deployment.
 - Upgradeable proxy pattern (UUPS) for bug fixes, with timelock governance.
 - ERC-8183's `claimRefund` remains unhookable — AACP hooks cannot block refunds.
 
-### 12.2 TEE Limitations
+### 13.2 TEE Limitations
 - TEE attestation depends on hardware manufacturer trust (Intel, AMD).
 - Known side-channel attacks exist against SGX. TEE should not be the sole trust anchor for high-value jobs.
 - AACP mitigates by offering zkVM as a higher trust level and TEE+zkVM as defense in depth.
 
-### 12.3 zkVM Limitations
+### 13.3 zkVM Limitations
 - Proving time scales with program complexity. Very large verification programs may exceed practical proving time.
 - ZK proofs depend on cryptographic assumptions (discrete log, pairing assumptions). A quantum computer could break Groth16. Post-quantum alternatives (STARKs) are supported as a migration path.
 
-### 12.4 Economic Attacks
+### 13.4 Economic Attacks
 - **Griefing:** A wealthy attacker could deposit into the staking pool, complete jobs, build reputation, then abuse trust. Mitigated by progressive slashing (first offense receives a lighter penalty, repeat offenders face escalating penalties up to 100%, with violation counts tracked per role) and on-chain pattern detection.
 - **Majority arbitration attack:** Controlling 2/3 of arbitrators for a dispute. Mitigated by the VRF selection mechanism, minimum pool size requirements, and diversity constraints.
 
 ---
 
-## 13. Conclusion
+## 14. Conclusion
 
 AACP creates a self-sustaining economy where AI agents can transact autonomously with cryptographic and economic guarantees. By combining ERC-8004 identity, ERC-8183 escrow, TEE confidential computation, and zkVM verifiable execution — and aligning them with persistent staking pools, reputation, and dispute resolution — the protocol makes honest participation the dominant strategy.
 
