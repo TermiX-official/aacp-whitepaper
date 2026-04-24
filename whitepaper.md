@@ -1409,6 +1409,487 @@ The Vault Extension is an **optional, independent module**. It does not modify a
 
 Agents that only do standard work-for-payment jobs never interact with the Vault Extension. Agents that want to offer capital management services opt-in by integrating with the StrategyVault.
 
+### 10.10 CEX Integration Extension — Off-Chain Capital Management
+
+#### 10.10.1 Motivation
+
+The on-chain Vault Extension (§10.3–10.9) enforces capital safety through smart contract constraints — the Provider physically cannot transfer assets out of the Vault. However, a major category of capital management occurs on **centralized exchanges (CEXes)**: quantitative trading, market making, and arbitrage strategies that require CEX order books, leverage, and liquidity.
+
+Typical scenario:
+- A Client holds 10,000 USDC on Binance.
+- A quantitative trading agent (Provider) offers to run a market-neutral strategy.
+- The Client creates a **trade-only API key** (no withdrawal permission) and delegates it to the Provider.
+- The Provider executes trades on the Client's behalf for 30 days.
+- At settlement, profits are split according to pre-agreed terms.
+
+This scenario cannot use the on-chain StrategyVault because the capital never leaves the CEX. AACP addresses it through the CEX Integration Extension — a trust model that replaces smart contract enforcement with **economic deterrence + TEE confinement + cryptographic settlement proofs**.
+
+#### 10.10.2 Trust Model Comparison
+
+```
+On-chain Vault (§10.3):
+  Security = Smart contract enforcement (Provider CANNOT steal)
+           + Economic incentives (staking as secondary defense)
+  Trust anchor: EVM execution guarantees
+
+CEX Integration:
+  Security = CEX permission system (trade-only API key, no withdrawal)
+           + TEE confinement (API key isolated in enclave)
+           + Economic deterrence (staking as PRIMARY defense)
+           + Cryptographic proofs (zkTLS for settlement data)
+  Trust anchor: CEX access control + TEE hardware + economic game theory
+```
+
+The CEX model is strictly weaker than the on-chain Vault in terms of enforcement guarantees. To compensate, it requires **higher Provider stakes** and **stronger monitoring**. The staking formula (§10.11) is specifically designed to make malicious behavior economically irrational even without smart contract enforcement.
+
+#### 10.10.3 Architecture
+
+**Critical design decision: The TEE operates as a Trusted Order Gateway, not a full execution environment.** The Provider runs their proprietary trading algorithm on their own infrastructure and sends **order intents** (signed messages describing desired trades) to a Platform-hosted TEE. The TEE validates each order against the job's risk parameters, signs it with the API key, and forwards it to the exchange. This design has three advantages over running the Provider's algorithm inside the TEE:
+
+1. **Strategy IP protection.** Quantitative strategies are trade secrets. The Provider never uploads source code to anyone — the algorithm runs entirely on the Provider's own servers.
+2. **Minimal TEE attack surface.** The TEE runs a fixed, open-source gateway program (validate → sign → forward → log). No arbitrary Provider code inside the enclave means simpler auditing and smaller attack surface.
+3. **No compute limitations.** TEE enclaves (especially SGX) have limited memory and CPU. The gateway model lets Providers use any hardware — GPUs, FPGAs, colocated servers — without constraint.
+
+The TEE enclave is hosted by the AACP Platform, not by the Provider. If the Provider controlled the TEE hardware, they could attempt side-channel attacks to extract the API key.
+
+```
+Provider's Server              AACP Platform (TEE Gateway)           Binance
+(runs strategy —         ┌────────────────────────────────┐
+ any language,           │        TEE Enclave             │
+ any hardware,           │  ┌──────────────────────────┐  │
+ fully private)          │  │                          │  │
+                         │  │  1. Verify Provider sig  │  │
+  Order intent     ────→ │  │  2. Validate limits:     │  │  Execute
+  {                      │  │     ├ maxDailyTrades     │ ───→ trade
+    action: "BUY",       │  │     ├ maxFeeRate         │  │
+    symbol: "BTCUSDT",   │  │     ├ maxPositionSize    │  │
+    qty: 0.05,           │  │     └ banned symbols     │  │
+    type: "MARKET",      │  │  3. Sign with API Key    │  │
+    nonce: 12345,        │  │  4. Forward to Binance   │  │
+    providerSig: "0x.."  │  │  5. Log order + response │  │
+  }                      │  │  6. Post-trade check:    │  │
+                         │  │     totalValue ≥ stopLoss│  │
+  ← Execution report ── │  │  7. TEE-attest the log   │  │
+    (TEE-attested)       │  │                          │  │
+                         │  │  API Key (plaintext)     │  │
+                         │  │  — never leaves enclave  │  │
+                         │  └──────────────────────────┘  │
+                         │                                │
+  Client ──────────────→ │  API Key (encrypted to TEE)    │
+  (encrypted handoff)    └────────────────────────────────┘
+```
+
+**Three-party trust model:**
+
+| Party | Can see | Cannot see | Trust basis |
+|-------|---------|------------|-------------|
+| **Client** | TEE attestation, on-chain snapshots, final settlement proof | API Key plaintext (encrypted before handoff) | Verifies TEE attestation; trusts TEE hardware isolation |
+| **Provider** | Own algorithm source code (runs on own servers), TEE-attested execution reports | API Key plaintext, enclave memory | Sends order intents only; never has physical access to TEE hardware or API key |
+| **Platform (TEE Host)** | Machine metrics, network traffic metadata, enclave health | Enclave memory contents, API Key plaintext, order contents | TEE hardware isolation (Intel SGX / AWS Nitro) prevents host from reading enclave |
+
+This architecture leverages the AACP Platform's **TEE Hosting** infrastructure (§7.3, $29-199/month per enclave). The TEE gateway is a fixed, open-source, audited program — the same binary runs for every job, identified by its MRENCLAVE measurement. The Platform operates the hardware but is cryptographically excluded from the enclave's contents.
+
+**Key components:**
+
+| Component | Role |
+|-----------|------|
+| **Trusted Order Gateway (TEE)** | Platform-hosted TEE enclave that holds the API key and acts as a secure proxy. Receives signed order intents from the Provider, validates them against job parameters (limits, stop-loss, banned operations), signs the request with the API key, forwards to the exchange, and logs everything with TEE attestation. The Provider runs their strategy externally and never touches the API key. |
+| **Trade Monitor** | A module within the TEE gateway that enforces risk limits on every order: max daily trades, max cumulative fees, max position size per asset, stop-loss threshold. After each trade execution, queries the CEX account balance and verifies totalValue >= stopLoss. Rejects orders that would breach any limit. |
+| **zkTLS Settlement** | Uses TLS Notary (or equivalent) to generate zero-knowledge proofs of CEX HTTPS responses — proving account balance, trade history, and P&L directly from the exchange's TLS session. |
+
+#### 10.10.4 Job Lifecycle for CEX Capital Management
+
+> See [`assets/aacp-cex-flow.md`](assets/aacp-cex-flow.md) for the full sequence diagram covering all eight phases below (Job Creation → Bid → TEE Provisioning → API Key Handoff → Trading Loop → Periodic Snapshots → Settlement → Distribution & Cleanup).
+
+```
+1. Client creates CEX capital-entrusted job
+   ├── Declares capital amount and exchange (e.g., 10,000 USDC on Binance)
+   ├── Sets parameters:
+   │   ├── stopLoss: -10% (maximum allowed drawdown)
+   │   ├── targetReturn: +5% / month
+   │   ├── performanceFee: 30% of excess returns
+   │   ├── managementFee: 50 USDC (funded via AACP Escrow)
+   │   ├── maxDailyTrades: 500
+   │   ├── maxFeeRate: 2% of capital (cumulative trading fees cap)
+   │   └── deadline: 30 days
+   ├── Client stake locked in AACPStaking (standard formula)
+   └── Job posted with verification strategy:
+       type: program
+       programCID: "QmXxx..."  (zkTLS balance verification program)
+       programHash: "0xabc..."
+       threshold: 0
+       
+       The program verifies:
+         1. zkTLS proof authenticity (response from exchange TLS cert)
+         2. finalBalance >= initialCapital × (1 + targetReturn) → pass/fail
+       
+       Capital-entrusted jobs produce objective, numeric outcomes
+       (final account balance) — no subjective rubric evaluation needed.
+       The zkTLS proof bridges off-chain CEX state to on-chain
+       verifiability, and the zkVM program makes the pass/fail
+       determination with mathematical certainty (L2 verification).
+
+2. Provider bids and is selected
+   ├── Provider inspects all parameters before bidding
+   ├── Provider stake locked in AACPStaking (CEX formula — see §10.11)
+   │   → Significantly higher than on-chain Vault stake
+   ├── Minimum reputation requirement: score >= 70 for CEX jobs
+   └── Platform provisions a TEE gateway enclave for this job
+       Provider receives the gateway's attested API endpoint
+
+3. API Key handoff (secure channel)
+   ├── Client creates trade-only API key on exchange
+   │   ├── Permissions: spot/futures trading ONLY
+   │   ├── No withdrawal, no transfer, no sub-account access
+   │   └── IP whitelist: Platform TEE gateway's static IP only
+   ├── Client encrypts API key with TEE gateway's public key
+   │   (derived from TEE attestation — only the enclave can decrypt)
+   │   Provider never sees the API key plaintext
+   ├── Encrypted key submitted on-chain as part of job metadata
+   │   (on-chain data is encrypted; plaintext never leaves TEE)
+   └── TEE gateway decrypts and verifies:
+       ├── Key is valid (test API call)
+       ├── Key has NO withdrawal permission
+       └── Account balance >= declared capital
+       → Gateway is now ready to accept order intents
+
+4. Trading execution (duration: up to deadline)
+   ├── Provider runs trading algorithm on own infrastructure
+   │   (any language, any hardware, fully private strategy code)
+   ├── Provider sends signed order intents to TEE gateway:
+   │   { action, symbol, qty, type, nonce, providerSignature }
+   ├── TEE gateway validates each order:
+   │   ├── Verifies Provider signature (ERC-8004 identity)
+   │   ├── Checks maxDailyTrades limit
+   │   ├── Checks cumulative fees against maxFeeRate
+   │   ├── Checks position size limits
+   │   ├── If any limit breached → reject order, return error
+   │   └── If valid → sign with API Key, forward to Binance
+   ├── After each trade execution:
+   │   ├── TEE queries account balance
+   │   ├── Checks totalValue >= stopLoss
+   │   ├── Logs order + response with TEE attestation
+   │   └── Returns TEE-attested execution report to Provider
+   ├── Periodic snapshots (every 4 hours):
+   │   ├── TEE gateway queries CEX account balance via API
+   │   ├── Generates TEE-attested snapshot (balance, positions, P&L)
+   │   ├── Snapshot hash submitted on-chain (data itself stored on IPFS)
+   │   └── If snapshot shows drawdown >= stopLoss:
+   │       ├── TEE gateway stops accepting new orders
+   │       ├── TEE cancels all open orders on exchange
+   │       └── On-chain event emitted: StopLossTriggered(jobId)
+   └── Client can query snapshot history at any time
+
+5. Settlement
+   ├── At deadline (or after stop-loss trigger):
+   │
+   │   Step A: TEE Gateway generates zkTLS proof of final balance
+   │   ├── Gateway initiates HTTPS request to CEX API: GET /account/balance
+   │   ├── TLS Notary captures the TLS session
+   │   ├── Generates ZK proof: "api.binance.com returned balance = X USDC
+   │   │   at timestamp T, authenticated by Binance's TLS certificate"
+   │   └── Proof submitted on-chain
+   │
+   │   Step B: Evaluator runs verification program in zkVM
+   │   ├── Inputs (public): initialCapital, finalBalance (from zkTLS proof),
+   │   │   targetReturn, zkTLS proof data
+   │   ├── Program verifies zkTLS proof authenticity
+   │   ├── Program computes: met_target = (finalBalance >= initialCapital × (1 + targetReturn))
+   │   ├── Exit code: 0 (pass) or 1 (fail)
+   │   ├── Groth16 ZK proof submitted on-chain
+   │   └── No subjective evaluation — result is purely mathematical
+   │
+   │   Step C: Fee distribution (via AACP Escrow)
+   │   ├── If target met (e.g., finalBalance = 11,500 USDC):
+   │   │   ├── Excess return: 11,500 - 10,000 × 1.05 = 1,000 USDC
+   │   │   ├── Provider performance fee: 1,000 × 30% = 300 USDC
+   │   │   │   (Client transfers to Provider on CEX or on-chain)
+   │   │   ├── Management fee: 50 USDC → Provider (from AACP Escrow)
+   │   │   ├── Platform fee: 2% of management fee → Treasury
+   │   │   └── Provider reputation: +5
+   │   │
+   │   ├── If target not met but no loss (e.g., finalBalance = 10,200 USDC):
+   │   │   ├── Client keeps all CEX funds
+   │   │   ├── Management fee: reduced or zero (per job terms)
+   │   │   └── Provider reputation: neutral
+   │   │
+   │   └── If loss (e.g., finalBalance = 9,200 USDC):
+   │       ├── Loss = 800 USDC (8%)
+   │       ├── Provider stake slashed proportionally (see §10.11)
+   │       ├── Slash distribution: 80% → Client, 20% → Treasury
+   │       ├── No management fee paid
+   │       └── Provider reputation: significant negative impact
+
+6. API Key revocation
+   ├── After settlement, TEE securely deletes API key from enclave
+   ├── Client revokes API key on exchange (recommended)
+   └── TEE attestation confirms key deletion
+```
+
+#### 10.10.5 Malicious Provider Attack Vectors and Defenses
+
+| Attack | Max extractable profit | Defense | Residual risk |
+|--------|----------------------|---------|---------------|
+| **Counter-trading:** Open opposite position on personal account, intentionally lose Client's funds | C × stopLoss% × ~75% (after fees/slippage) | Stake slashed proportional to loss (§10.11); TEE trade logs enable forensic analysis; statistical anomaly detection | Provider uses unlinked identity on different exchange — hard to prove on-chain |
+| **Fee churning:** Execute excessive trades to generate rebate income | C × maxFeeRate × rebateRate (~50%) | Job parameter `maxFeeRate` caps cumulative fees; Trade Monitor enforces in real-time | Provider may negotiate higher maxFeeRate from uninformed Client |
+| **Front-running:** Buy ahead of Client's large orders using personal account | Varies; bounded by market impact | All orders logged in TEE with millisecond timestamps; pattern detection in dispute | Difficult to detect if Provider uses separate infrastructure |
+| **Passive neglect:** Accept job, do nothing, collect management fee | managementFee (from Escrow) | Verification program checks finalBalance >= target; management fee withheld if target not met | Low-value attack; reputation penalty deters repeat |
+| **Stop-loss evasion:** Manipulate snapshot timing to avoid triggering stop-loss | C × (actual_loss - stopLoss%) | 4-hour snapshot interval limits gap; high-value jobs use 1-hour intervals; Client can trigger manual snapshot | Flash crash between snapshots could exceed stopLoss |
+| **TEE side-channel attack:** Provider attempts to extract API key from enclave via hardware attacks | Full API key access | TEE runs on Platform hardware, not Provider hardware — Provider has no physical access; attestation rejects non-Platform enclaves | Platform collusion (mitigated by Platform's own stake and reputation) |
+
+#### 10.10.6 Security Invariants
+
+```
+Invariant 1: API key confinement
+  The API key plaintext MUST only exist inside the Platform-hosted TEE enclave.
+  ├── Encrypted in transit (TEE public key encryption)
+  ├── Encrypted at rest (TEE sealing)
+  ├── Never exposed to Provider operator (no physical access to TEE hardware)
+  ├── Never exposed to Platform operator (TEE hardware isolation)
+  └── Deleted from enclave at job termination
+
+Invariant 1b: Provider-Platform separation
+  The Provider MUST NOT have physical access to the TEE hardware.
+  ├── Provider runs strategy on own infrastructure
+  ├── Provider sends signed order intents to TEE gateway
+  ├── Provider never uploads strategy code to anyone
+  ├── Platform provisions and operates the TEE gateway enclave
+  └── TEE gateway's MRENCLAVE must match the published, audited
+      gateway binary — non-standard enclaves are rejected
+
+Invariant 2: Trade-only permission
+  The API key MUST NOT have withdrawal or transfer permissions.
+  ├── Client configures this on the exchange
+  ├── TEE verifies key permissions via API call at job start
+  ├── If key has withdrawal permission → TEE refuses to start
+  └── Even if TEE is compromised, attacker cannot withdraw funds
+
+Invariant 3: Complete audit trail
+  Every order forwarded to the exchange MUST be logged with TEE attestation.
+  ├── Logs include: Provider's order intent, TEE validation result,
+  │   CEX request sent, CEX response received, post-trade balance
+  ├── Log integrity guaranteed by TEE attestation chain
+  ├── Logs stored on IPFS, hashes committed on-chain
+  └── Arbitrators can replay full trading history in disputes
+
+Invariant 4: Settlement data authenticity
+  Final account balance MUST be proven via zkTLS.
+  ├── Proof that HTTPS response came from exchange's TLS certificate
+  ├── Proof that response contained specific balance at specific time
+  ├── Neither Provider nor Evaluator can fabricate balance data
+  └── On-chain verifier validates zkTLS proof
+```
+
+### 10.11 CEX Staking Calculation Model
+
+The on-chain Vault Extension uses standard AACP staking (budget × 10% ÷ reputationCoefficient) because the StrategyVault smart contract is the primary security mechanism. In the CEX scenario, **staking is the primary defense** — it must be calibrated so that the expected penalty for any malicious strategy exceeds the expected profit.
+
+#### 10.11.1 Game-Theoretic Derivation
+
+For malicious behavior to be economically irrational, the following must hold for every attack vector:
+
+```
+Expected penalty > Expected profit
+p × Slash > M
+
+Where:
+  M = Maximum extractable profit from the attack
+  p = Probability of detection (given TEE logs + statistical analysis)
+  Slash = Amount slashed from Provider's stake when detected
+```
+
+The dominant attack is **counter-trading** (highest M), so the stake must primarily defend against it:
+
+```
+Counter-trading profit:
+  M = C × S × η
+
+Where:
+  C = Client's capital under management
+  S = stopLoss percentage (maximum allowed drawdown)
+  η = Extraction efficiency (actual profit / Client's loss)
+    = ~0.75 (after trading fees, slippage, imperfect timing)
+
+If Slash = 100% of stake on confirmed malice:
+  p × Stake > C × S × η
+  Stake > C × S × η / p
+
+Adding safety multiplier α to ensure strong deterrence:
+  Stake_min = C × S × η × α / p
+```
+
+#### 10.11.2 Formula
+
+```
+                    C × S × η × α
+Stake_min = ─────────────────────────────
+                      p × R
+
+Parameters:
+  C = Capital under management (declared by Client)
+  S = stopLoss percentage (Job parameter, e.g., 0.20 for 20%)
+  η = Extraction efficiency coefficient (protocol constant = 0.75)
+  α = Safety multiplier (protocol constant = 1.5)
+  p = Detection probability (varies by verification level)
+  R = Reputation coefficient = min(1.0, reputationScore / 100)
+```
+
+**Detection probability (p) by verification level:**
+
+| Verification level | p | Justification |
+|-------------------|-----|--------------|
+| No TEE (L0) | 0.50 | Only statistical analysis and manual dispute; Provider's trades are opaque |
+| TEE trade logs (L1) | 0.85 | Complete API call log with TEE attestation; forensic replay possible |
+| TEE + zkTLS snapshots (L1+) | 0.95 | Periodic on-chain balance proofs; anomalies detectable within snapshot interval |
+
+Higher verification levels increase p, which **decreases** the required stake — creating a natural incentive for Providers to adopt stronger verification.
+
+#### 10.11.3 Staking Examples
+
+With default parameters (S=20%, η=0.75, α=1.5) and TEE trade logs (p=0.85):
+
+| Capital (C) | Reputation | R | Stake required | % of capital |
+|------------|-----------|-----|---------------|-------------|
+| 1,000 USDC | New (50) | 0.50 | 529 USDC | 52.9% |
+| 1,000 USDC | Good (80) | 0.80 | 331 USDC | 33.1% |
+| 1,000 USDC | Excellent (95) | 0.95 | 278 USDC | 27.8% |
+| 10,000 USDC | New (50) | 0.50 | 5,294 USDC | 52.9% |
+| 10,000 USDC | Good (80) | 0.80 | 3,309 USDC | 33.1% |
+| 10,000 USDC | Excellent (95) | 0.95 | 2,787 USDC | 27.8% |
+| 100,000 USDC | Excellent (95) | 0.95 | 27,866 USDC | 27.9% |
+| 100,000 USDC | Top (98) | 0.98 | 27,041 USDC | 27.0% |
+
+**Observations:**
+- New agents must stake ~53% of managed capital — a natural barrier that filters unproven Providers from capital management roles.
+- Established agents with excellent reputation stake ~28% — viable for professional quantitative operations.
+- The absolute stake scales linearly with capital, maintaining consistent deterrence at all scales.
+
+#### 10.11.4 Tiered Capital Model
+
+For large capital amounts, linear staking may create prohibitive barriers. The protocol supports a tiered model that reduces the marginal stake rate for higher capital while imposing stricter verification and reputation requirements:
+
+```
+Tier 1: C <= 10,000 USDC
+  Stake = full formula (§10.11.2)
+  Minimum reputation: 70
+  Minimum verification: TEE trade logs (L1)
+
+Tier 2: 10,000 < C <= 100,000 USDC
+  Stake = Tier1_max + (C - 10,000) × S × η × α / (p × R) × 0.60
+  Minimum reputation: 85
+  Minimum verification: TEE + zkTLS snapshots (L1+)
+  Additional: 4-hour snapshot interval mandatory
+
+Tier 3: C > 100,000 USDC
+  Stake = Tier1_max + Tier2_max + (C - 100,000) × S × η × α / (p × R) × 0.40
+  Minimum reputation: 92
+  Minimum verification: TEE + zkTLS snapshots (L1+)
+  Additional: 1-hour snapshot interval mandatory
+             72-hour dispute window mandatory
+             Human or human-llm evaluation recommended
+```
+
+**Tiered staking example** (reputation 95, TEE + zkTLS p=0.95):
+
+| Capital | Linear stake (no tiers) | Tiered stake | Savings |
+|---------|------------------------|-------------|---------|
+| 10,000 USDC | 2,787 USDC | 2,787 USDC | — |
+| 50,000 USDC | 13,934 USDC | 9,540 USDC | 31.5% |
+| 100,000 USDC | 27,866 USDC | 17,834 USDC | 36.0% |
+| 500,000 USDC | 139,329 USDC | 55,172 USDC | 60.4% |
+
+The tiered model maintains deterrence because:
+1. Higher tiers require higher reputation (harder to Sybil attack).
+2. Higher tiers require stronger verification (higher p → harder to cheat undetected).
+3. Mandatory snapshot intervals shrink the window for malicious activity.
+4. The absolute stake remains substantial — even at Tier 3 rates, managing 500K USDC requires ~55K USDC in stake.
+
+#### 10.11.5 Loss-Based Slashing Schedule
+
+When the Client incurs a capital loss, the Provider's stake is slashed proportionally:
+
+```
+Loss severity = (initialCapital - finalBalance) / initialCapital
+
+Slashing schedule:
+  Loss 0–5%:    slash 20% of locked stake
+  Loss 5–10%:   slash 40% of locked stake
+  Loss 10–15%:  slash 60% of locked stake
+  Loss 15–20%:  slash 80% of locked stake
+  Loss > 20%:   slash 100% of locked stake
+                 (stop-loss should have prevented this —
+                  indicates system failure or deliberate evasion)
+
+Confirmed malicious behavior (determined by arbitration):
+  Always: slash 100% of locked stake + permanent ban
+  Reputation: reset to 0
+
+Slash distribution (CEX jobs):
+  80% → Client (higher than standard 60% — Client lost actual capital)
+  15% → Protocol treasury
+  5%  → Arbitrators (if dispute was involved)
+```
+
+#### 10.11.6 Economic Security Analysis
+
+**Theorem: Under the CEX staking model, counter-trading is a negative expected value strategy for the Provider.**
+
+```
+Proof (by example):
+
+  Setup:
+    C = 10,000 USDC, S = 20%, reputation = 80 (R = 0.80)
+    Verification: TEE + zkTLS (p = 0.95)
+    Provider stake = 10,000 × 0.20 × 0.75 × 1.5 / (0.95 × 0.80) = 2,961 USDC
+
+  Counter-trading attack:
+    Provider intentionally loses 10% of Client's capital (1,000 USDC)
+    Provider's counter-position profit: 1,000 × 0.75 = 750 USDC (after fees)
+
+  Expected outcome:
+    If detected (p = 0.95):
+      Slash = 100% of stake (confirmed malice) = 2,961 USDC
+      Net = 750 - 2,961 = -2,211 USDC (loss)
+    If undetected (1 - p = 0.05):
+      Net = 750 USDC (profit)
+
+    Expected value = 0.95 × (-2,211) + 0.05 × 750
+                   = -2,100.45 + 37.50
+                   = -2,062.95 USDC
+
+  The Provider loses ~2,063 USDC in expectation.
+  The attack is economically irrational. ∎
+```
+
+This holds for all parameter combinations where α × η / (1 - p) > 1, which is satisfied by the protocol defaults (1.5 × 0.75 / 0.05 = 22.5 >> 1).
+
+#### 10.11.7 Comparison: On-Chain Vault vs CEX Staking
+
+| Property | On-chain Vault (§10.5) | CEX Integration (§10.10–10.11) |
+|----------|----------------------|-------------------------------|
+| Stake base | management fee (budget) | managed capital (C) |
+| Stake formula | budget × 10% ÷ R | C × S × η × α / (p × R) |
+| Typical stake % | ~10% of fee | ~28-53% of capital |
+| Why higher for CEX | Smart contract is primary defense; stake is secondary | Stake is primary defense; no contract enforcement on CEX |
+| Capital safety | Contract-enforced (Provider cannot transfer out) | CEX permission-enforced (trade-only API key) + economic deterrence |
+| Stop-loss | Contract-level revert (per-transaction) | TEE-enforced soft stop (per-snapshot) |
+| Settlement proof | On-chain state (trustless) | zkTLS proof of CEX state |
+
+### 10.12 Relationship Updates — Core AACP and Extensions
+
+The CEX Integration Extension, like the on-chain Vault Extension, is an **optional, independent module**. It integrates with the core protocol through the same standard interfaces:
+
+| Core AACP Component | How CEX Extension Uses It |
+|---------------------|--------------------------|
+| ERC-8004 (Identity) | Provider must have Agent NFT; reputation tracks CEX capital management history separately |
+| AACPStaking | Provider locks stake per §10.11 formula; higher amounts than standard jobs |
+| AACPReputation | CEX job outcomes (returns, losses, anomalies) feed into a capital-management sub-score |
+| AACPDispute | Disputes reference TEE trade logs and zkTLS proofs as evidence |
+| Groth16Verifier | Verifies zkTLS settlement proofs and return calculations |
+| AACPTreasury | Receives platform fee on management fees + 15% of loss-related slashing |
+| ERC-8183 | Management fee component uses standard job escrow; capital itself stays on CEX |
+| TeeAttestationVerifier | Verifies TEE attestations for trade logs and key custody proofs |
+
 ---
 
 ## 11. Deployment
@@ -1486,6 +1967,14 @@ Agents can operate fully autonomously — discovering jobs, bidding, executing, 
 - Open arbitrator registration
 - Protocol governance (fee parameters, slash rates)
 
+### Phase 5: CEX Integration (Q2 2027)
+- Deploy TEE Key Custody and Trade Monitor infrastructure
+- Integrate zkTLS (TLS Notary) for CEX settlement proofs
+- Implement CEX staking formula (§10.11) in AACPStaking contract
+- Launch CEX capital management jobs on testnet with Binance API support
+- Extend to OKX, Bybit, and other major exchanges
+- Tiered capital model and anomaly detection for large-scale capital management
+
 ---
 
 ## 13. Security Considerations
@@ -1527,3 +2016,5 @@ The result is an infrastructure where agents can trust each other not because th
 5. Automata DCAP: On-chain TEE Attestation. https://docs.ata.network
 6. Groth16: On the Size of Pairing-based Non-interactive Arguments. Jens Groth, 2016.
 7. EIP-196/197: BN254 Pairing Precompiles. https://eips.ethereum.org/EIPS/eip-196
+8. TLSNotary: Provable TLS Session Data. https://tlsnotary.org
+9. zkTLS: Zero-Knowledge Proofs for TLS Transcripts. https://docs.pluto.xyz
