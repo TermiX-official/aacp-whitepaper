@@ -31,44 +31,146 @@ AACP solves these problems by combining cryptographic verification (ZK proofs), 
 
 ### 2.1 Roles
 
-AACP defines four protocol roles. A single agent can assume multiple roles across different jobs.
+AACP defines five protocol roles. A single agent can assume multiple roles across different jobs.
 
 | Role | Responsibility | Earns | Risks |
 |------|---------------|-------|-------|
-| **Client** | Posts jobs, defines requirements, provides verification programs, funds escrow | Quality work product | Stake slashed for malicious job posting |
-| **Provider** | Bids on jobs, executes work, submits deliverables | Job payment (95% of budget) | Stake slashed for non-delivery or garbage submission |
-| **Evaluator** | Runs Client's verification program on deliverables, settles jobs | Evaluation fee (3-4% of budget) | Stake slashed for unfair evaluation |
-| **Arbitrator** | Resolves disputes via independent re-evaluation | Arbitration fee (share of dispute deposit) | Stake slashed for voting against eventual majority |
+| **Client** | Posts jobs, defines requirements, selects Skills or provides verification programs, funds escrow | Quality work product | Stake slashed for malicious job posting |
+| **Provider** | Bids on jobs, executes work in any environment of their choice, submits deliverables. May optionally opt in to a Skill for reputation boost — not required. | Job payment (95% of budget) | Stake slashed for non-delivery or garbage submission |
+| **Evaluator** | Must load the Client-selected Skill (or run the Client-authored program) inside a TEE to verify deliverables; settles jobs | Evaluation fee (3-4% of budget) | Stake slashed for unfair evaluation |
+| **Arbitrator** | Resolves disputes via independent re-evaluation under the same Skill set, inside a TEE | Arbitration fee (share of dispute deposit) | Stake slashed for voting against eventual majority |
+| **Skill Author** | Publishes and maintains Skills — packaged domain expertise used by Providers, Evaluators, and Arbitrators (§5.6) | Royalties from every job that loads the Skill | Stake slashed for malicious or systematically biased Skills |
 
 ### 2.2 Building Blocks
 
-![AACP Architecture](assets/aacp-architecture.png)
+Three diagrams together describe the architecture — what exists, how coordination works, and how value flows. The full source (with color legend and extended commentary) lives in [`assets/aacp-architecture.md`](assets/aacp-architecture.md).
 
+**(a) Layered overview.** Four bands: Agents, On-chain Core (with the Skill Registry as a first-class module), Verification Infra, and Off-chain Content. Inter-layer arrows show *kind* of relationship only; detailed role × module interactions are in the matrix below.
+
+```mermaid
+flowchart TB
+    subgraph Agents["AGENTS — Five Protocol Roles §2.1"]
+        direction LR
+        C["Client"]
+        P["Provider"]
+        E["Evaluator"]
+        A["Arbitrator"]
+        SA["Skill Author"]
+    end
+
+    subgraph Core["ON-CHAIN CORE"]
+        direction LR
+        ID["ERC-8004<br/>Identity + Reputation"]
+        STK["AACP Staking Pool"]
+        ESC["ERC-8183<br/>Job Escrow"]
+        DSP["Dispute &amp;<br/>Arbitration"]
+        SR["Skill Registry §5.6"]
+        ENG["Slash / Reward Engine"]
+        USDC[("USDC Escrow")]
+    end
+
+    subgraph Verify["VERIFICATION INFRA §5"]
+        direction LR
+        L0["L0 — Human Panel"]
+        L1["L1 — TEE<br/>SGX · TDX · Nitro"]
+        L2["L2 — zkVM<br/>SP1 · RISC Zero"]
+        L3["L3 — TEE + zkVM"]
+    end
+
+    subgraph Off["OFF-CHAIN CONTENT — IPFS / Arweave"]
+        direction LR
+        DOC["Skill Documents"]
+        COR["Reference + Sealed Corpus"]
+        PROG["Verification Programs"]
+        DEL["Deliverables + Attestations"]
+    end
+
+    Agents ==> Core
+    Core  -- attested by --> Verify
+    Core  -. CID pinned .-> Off
+    Verify -. reads .-> Off
+
+    classDef role fill:#0E1F0E,stroke:#AAFF3F,color:#E9F0E2,stroke-width:2px
+    classDef coreNode fill:#0A0E1A,stroke:#5AB9FF,color:#E9F0E2
+    classDef skill fill:#1A1108,stroke:#FFB627,color:#FFE4B3,stroke-width:2px
+    classDef verify fill:#14091A,stroke:#B48CFF,color:#E9F0E2
+    classDef off fill:#0A0C0A,stroke:#5C635A,color:#9AA397
+    classDef money fill:#14140A,stroke:#FFE500,color:#FFE500,stroke-width:2px
+
+    class C,P,E,A,SA role
+    class ID,STK,ESC,DSP,ENG coreNode
+    class SR skill
+    class L0,L1,L2,L3 verify
+    class DOC,COR,PROG,DEL off
+    class USDC money
 ```
-┌─────────────────────────────────────────────────────────┐
-│                          AACP                           │
-│                                                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌────────────────┐  │
-│  │ ERC-8004    │  │ ERC-8183    │  │ AACP Staking   │  │
-│  │ Identity +  │←→│ Job Escrow  │←→│ Pool + Reputa- │  │
-│  │ Reputation  │  │             │  │ tion + Disputes│  │
-│  └──────┬──────┘  └──────┬──────┘  └───────┬────────┘  │
-│         │                │                  │           │
-│  ┌──────▼──────┐  ┌──────▼──────┐  ┌───────▼────────┐  │
-│  │ Agent NFT   │  │ USDC Escrow │  │ Slash/Reward   │  │
-│  │ (Identity)  │  │ (Payments)  │  │ Engine         │  │
-│  └─────────────┘  └─────────────┘  └────────────────┘  │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │             Verification Layer                  │    │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────────────┐ │    │
-│  │  │  zkVM   │  │   TEE   │  │ TEE + zkVM      │ │    │
-│  │  │ (SP1 /  │  │ (SGX /  │  │ (Dual proof)    │ │    │
-│  │  │ RISC-0) │  │ Nitro)  │  │                 │ │    │
-│  │  └─────────┘  └─────────┘  └─────────────────┘ │    │
-│  └─────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
+
+**Role × Module interactions.**
+
+| Module | Client | Provider | Evaluator | Arbitrator | Skill Author |
+|---|---|---|---|---|---|
+| ERC-8004 Identity | mint NFT | mint NFT | mint NFT | mint NFT | mint NFT |
+| Staking Pool | stake on `createJob` | stake on `setProvider` | stake on first action | stake on assignment | lock `authorStake` |
+| Job Escrow (§4.1) | `createJob` · `fund` | `bid` · `submit` | `approve` / `reject` | — | — |
+| Dispute & Arbitration (§8) | may open dispute | may open dispute | — | cast vote | — |
+| Skill Registry (§5.6) | select skillSet | _optional_ opt-in load | **load** same skillSet (required) | **load** same skillSet (required) | publish + maintain |
+| USDC Escrow | fund | receive payment | receive fee | receive dispute reward | receive royalty |
+
+**(b) Skill binds the verification side.** The conceptual novelty. The same Skill manifest (pinned as `skillSetHash` at `createJob`) must be loaded by Evaluator and Arbitrator; Provider may optionally opt in for reputation boost. This eliminates interpretation drift on the verification side and makes dispute re-execution deterministic — without constraining how Providers produce work.
+
+```mermaid
+flowchart TB
+    SA["Skill Author<br/><i>publishes + stakes</i>"]
+    SM["<b>Skill Manifest</b><br/>solidity-audit@2.1.0<br/>skillSetHash pinned at createJob"]
+
+    SA ==>|"publish + stake"| SM
+
+    SM -->|"criterion set"| C["Client<br/><i>selects at createJob</i>"]
+    SM -.->|"optional opt-in:<br/>methodology + templates"| P["Provider<br/><i>executes anywhere</i>"]
+    SM ==>|"MUST load:<br/>rubric + sealed adversarial checks"| E["Evaluator<br/><i>verifies in TEE</i>"]
+    SM ==>|"MUST load:<br/>identical re-execution"| A["Arbitrator<br/><i>on dispute</i>"]
+
+    P -. opt-in royalty .-> SA
+    E == mandatory royalty ==> SA
+    A == mandatory royalty ==> SA
+
+    classDef role fill:#0E1F0E,stroke:#AAFF3F,color:#E9F0E2,stroke-width:2px
+    classDef skill fill:#1A1108,stroke:#FFB627,color:#FFE4B3,stroke-width:2px
+    classDef author fill:#0E1F0E,stroke:#FFB627,color:#FFE4B3,stroke-width:2px
+
+    class C,P,E,A role
+    class SA author
+    class SM skill
 ```
+
+**(c) Value flow.** Single escrow, five outflows. Royalties are deducted from Provider and Evaluator shares (§5.6.5, §6.1), not added on top of the Client's cost.
+
+```mermaid
+flowchart LR
+    C["Client"] ==fund job budget==> USDC[("USDC Escrow")]
+
+    USDC ==94% minus royalty==> P["Provider<br/><i>work payment</i>"]
+    USDC ==3–4% minus royalty==> E["Evaluator<br/><i>evaluation fee</i>"]
+    USDC ==aggregated royalties==> SA["Skill Author<br/><i>per-use rent</i>"]
+    USDC ==2% protocol fee==> TR["Treasury<br/><i>via Slash/Reward Engine</i>"]
+    USDC ==share of dispute deposit==> A["Arbitrator<br/><i>only on dispute</i>"]
+
+    classDef role fill:#0E1F0E,stroke:#AAFF3F,color:#E9F0E2,stroke-width:2px
+    classDef author fill:#0E1F0E,stroke:#FFB627,color:#FFE4B3,stroke-width:2px
+    classDef money fill:#14140A,stroke:#FFE500,color:#FFE500,stroke-width:2px
+    classDef treasury fill:#0A0E1A,stroke:#5AB9FF,color:#E9F0E2
+
+    class C,P,E,A role
+    class SA author
+    class USDC money
+    class TR treasury
+```
+
+Three invariants worth naming explicitly, each visible in a different diagram:
+
+- **`skillSetHash` binds the verification side.** The resolved Skill set pinned at `createJob` forces Evaluator and Arbitrator to operate under the same methodology; Client selects it; Provider is deliberately unbound and free to produce work any way they want (see diagram b; §5.6.1, §5.6.8).
+- **Verification infra is shared.** The same L0–L3 stack is used by Providers (to produce attested work), Evaluators (to verify), and Arbitrators (to re-run under dispute) — no separate "evaluation runtime" (diagram a).
+- **Skill Author income is per-use rent, not per-job labor.** The asymmetry in diagram c is the economic argument for why Skill Author is a first-class role rather than a footnote — it is the only leg that accrues from network-wide usage without per-job participation.
 
 ---
 
@@ -197,6 +299,8 @@ Lower reputation = higher lock required. This makes Sybil attacks expensive — 
 ### 4.3 Verification Strategy
 
 The Client defines the complete **Verification Strategy** at job creation time. This strategy specifies how the deliverable will be evaluated — the Evaluator executes it, but does not design it. This ensures acceptance criteria are transparent, pre-agreed, and auditable.
+
+A Client has two routes to a Verification Strategy: **(a)** author one directly using the three primitives below, or **(b)** select one or more **Skills** (§5.6) that already package these primitives for a given domain. Skills are the market-discovered, reputation-weighted default; the primitives remain available for bespoke or long-tail jobs and are the substrate every Skill is built from.
 
 AACP supports three strategy types:
 
@@ -573,6 +677,351 @@ Higher-value jobs require stronger verification strategies:
 
 These thresholds are governance-adjustable parameters stored in the AACPStaking contract.
 
+### 5.6 Skill Registry
+
+The verification primitives introduced so far — `program`, `rubric`, `hybrid` — each require the Client to author a complete Verification Strategy from scratch. In practice, every industry has already accumulated decades of domain-specific verification know-how: Solidity audit checklists, DeFi risk metrics, legal clause libraries, medical peer-review criteria, translation style guides. This expertise is locked inside human experts, firm playbooks, and proprietary tools — none of it is natively composable in an agent commerce protocol.
+
+AACP introduces **Skills** as the canonical unit for packaging, distributing, and pricing this expertise on-chain. A Skill is a signed, versioned bundle of methodology, rubrics, verification programs, tool allowlists, and reference corpora. Evaluators and Arbitrators **must** load the Skill to verify or re-verify a job. Providers **may** load the same Skill as a methodology template, but are not required to — only the deliverable is judged, not the process that produced it.
+
+#### 5.6.1 Design Principle: Verifier-Side Primitive
+
+A Skill is fundamentally a **verifier-side primitive**. The protocol cares about whether the deliverable meets the Client's selected criteria, not about how the Provider produced it. Skills bind three parties to a single shared methodology:
+
+```
+Verification binding (mandatory):
+  Client specifies skill X v2.1  →  Evaluator loads skill X v2.1
+                                 →  Arbitrator loads skill X v2.1
+  (same artifact, same criteria, deterministic re-execution under dispute)
+
+Production (unbound):
+  Provider produces deliverable however they want
+    - may load skill X as a methodology guide
+    - may use a proprietary playbook
+    - may run locally, in TEE, on GPU clusters, anywhere
+  What matters: whether the deliverable passes verification.
+```
+
+This asymmetry is intentional. Requiring Providers to use a specific Skill would foreclose three kinds of high-value supply:
+
+- **Domain experts with proprietary methodologies** — a top-tier audit agent may have a private playbook that outperforms the public Skill. Forcing Skill adoption drives them away.
+- **Closed-source strategy agents** — private quant strategies, confidential research methods, unpublished model weights. These cannot be surfaced as Skills.
+- **Compute-specialized infrastructure** — agents running on GPU clusters, custom silicon, or large memory footprints may not fit a TEE budget. Forcing TEE execution bans legitimate work.
+
+The protocol's guarantee is: *whatever you delivered, it was verified under the Skill the Client picked, by a verifier bound to that Skill*. The production path is the Provider's business. This also cleanly separates the verification mechanism (Skill + TEE on the verifier) from the execution choice (Provider's own environment).
+
+A Skill carries three content surfaces, each visible to a different set of roles:
+
+| Surface | Contents | Visible to |
+|---------|---------|-----------|
+| **Public** | Methodology, step-by-step procedure, templates, self-check list, published rubric dimensions and weights | Everyone who chooses to read the manifest — Client, Provider (optional), Evaluator, Arbitrator |
+| **Sealed** | Adversarial test corpus, hidden red-flag detectors, anti-gaming heuristics | Decrypted only inside Evaluator/Arbitrator TEE; never exposed to Provider or Client |
+| **Shared rubric** | Final scoring dimensions, thresholds, pass/fail logic | Everyone; exactly the criteria that will be applied |
+
+The sealed surface is critical: a Provider who can see every test the Evaluator will run can optimize for minimal compliance ("format-matching"). Sealing adversarial corpora and red-flag detectors while keeping the scoring rubric public preserves transparency without giving up discrimination.
+
+#### 5.6.2 Skill Manifest
+
+Skill manifests follow the open [agentskills.io](https://agentskills.io) standard, extended with AACP-specific on-chain fields. The manifest is content-addressed; its hash is the Skill's canonical identifier on-chain.
+
+```yaml
+---
+# ---------- Open-standard fields (agentskills.io) ----------
+name: solidity-audit
+description: >
+  Full-spectrum Solidity smart contract audit. Detects reentrancy, integer
+  overflow, access-control flaws, oracle manipulation, unchecked external
+  calls, and storage layout issues. Produces structured findings with
+  severity, location, reproduction, and remediation.
+allowed-tools:
+  - etherscan-read
+  - sourcify-fetch
+  - slither-wasm
+  - 4byte-decode
+context: fork
+model: claude-opus-4-7
+
+# ---------- AACP on-chain extensions ----------
+version: 2.1.0                    # SemVer; immutable once published
+author: 0xDaffyAuditor.eth
+signature: 0xabc…                 # author signature over manifest hash
+skillCID: bafybeigd…              # this manifest on IPFS
+referenceCorpusCID: bafybei…      # labeled good/bad contracts (public subset)
+sealedCorpusCID: bafybei…         # adversarial corpus (TEE-decryptable only)
+verificationPrograms:
+  - cid: bafybei-slither-wasm
+    hash: 0xdef…
+    role: sealed-check
+
+domain: [solidity, evm, smart-contract, defi, audit]
+jobTypes: [program, rubric, hybrid, consensus-research]
+requiredLevel: L1                 # minimum verification level that must load this Skill
+
+dependencies:
+  - evm-bytecode-primitives@^3.0
+  - defi-risk-base@^1.2
+
+economics:
+  providerRoyaltyPct: 1.0         # % of Provider payment
+  evaluatorRoyaltyPct: 1.5        # % of Evaluator fee
+  arbitratorRoyaltyPct: 0.5       # % of dispute deposit (per arbitrator that loads)
+  authorStake: 5000               # USDC stake locked while Skill is active
+  minimumFee: 5                   # USDC floor per invocation
+  slashOnMalice: 100              # % of authorStake slashed if malicious
+  slashOnStale: 20                # % slashed if unmaintained past deprecation window
+
+audit:
+  shadowTestCorpusCID: bafybei…   # protocol-held validation set
+  minPrecision: 0.85              # required to publish
+  minRecall: 0.80
+  reportedPrecision: 0.942        # emergent, updated by protocol
+  reportedRecall: 0.897
+  reportedOverturnRate: 0.018
+
+content:
+  publicSections: [methodology, procedure, self-check, rubric]
+  sealedSections: [adversarial-tests, red-flags]
+  sharedRubric:
+    dimensions:
+      - { name: "Reentrancy risk",       weight: 20, threshold: 80 }
+      - { name: "Access-control hygiene", weight: 20, threshold: 80 }
+      - { name: "Oracle manipulation",    weight: 15, threshold: 80 }
+      - { name: "Arithmetic safety",      weight: 15, threshold: 80 }
+      - { name: "External-call safety",   weight: 15, threshold: 80 }
+      - { name: "Gas and storage hygiene", weight: 15, threshold: 70 }
+---
+```
+
+The manifest body that follows the YAML frontmatter contains the markdown instructions for the Skill — methodology, step-by-step procedure, templates, examples. This body is identical in role to a Claude Skill's `SKILL.md` content: a pure instruction vehicle, not executable code. All executable logic lives in the referenced `verificationPrograms` (zkVM binaries) and `allowed-tools` (pre-approved external calls).
+
+#### 5.6.3 On-chain vs Off-chain Split
+
+Skills follow the same content-integrity pattern used for deliverables and proofs: **economics and commitments on-chain, content off-chain with pinned hashes.**
+
+| Component | Storage | Rationale |
+|-----------|---------|-----------|
+| Manifest document (`SKILL.md`, frontmatter, body) | IPFS / Arweave | Multi-KB to sub-MB; on-chain storage would be prohibitive |
+| Reference corpus (public examples) | IPFS | Can be multi-GB |
+| Sealed corpus (adversarial tests) | IPFS, encrypted to TEE attestation key | Decrypted only inside Evaluator/Arbitrator enclave |
+| Verification programs (zkVM WASM/ELF) | IPFS | Multi-MB binaries |
+| Skill metadata (name, version, author, domain, CIDs, dependencies) | On-chain (SkillRegistry contract) | Required for discovery and dispatch |
+| Royalty rates, stake, slashing rules | On-chain | Must be executable |
+| Emergent metrics (usage, precision, recall, overturn rate) | On-chain (cumulative) | Must be tamper-proof; feeds Skill selection |
+| Author signature over manifest hash | On-chain | Integrity anchor |
+| Installation record (who loaded Skill X at job Y) | On-chain (event) | Required for royalty distribution and dispute re-execution |
+
+The protocol commits to Skill integrity without hosting its content — identical to how NFTs commit to image ownership without storing the image.
+
+#### 5.6.4 Skill Lifecycle
+
+```
+      ┌─────────────┐
+      │  Authored   │  author assembles manifest + corpora off-chain
+      └──────┬──────┘
+             │ register(manifest, stake ≥ authorStake)
+             ▼
+      ┌─────────────┐
+      │ Shadow-test │  protocol runs Skill against shadowTestCorpusCID
+      │   (gated)   │  requires reportedPrecision ≥ minPrecision
+      └──────┬──────┘  requires reportedRecall    ≥ minRecall
+             │ pass
+             ▼
+      ┌─────────────┐
+      │   Active    │  discoverable, installable, earning royalties
+      └──┬───────┬──┘
+         │       │
+   publish│       │ malicious / stale / overturned repeatedly
+   new    │       ▼
+   version│   ┌─────────────┐
+         │   │ Deprecated  │  still executable for in-flight jobs
+         │   └──────┬──────┘  no new installs; stake begins unlock window
+         │          │
+         │          ▼
+         │   ┌─────────────┐
+         │   │   Retired   │  removed from discovery; stake returned
+         │   └─────────────┘  or partially slashed
+         │
+         ▼
+      (next version enters Shadow-test under same author)
+```
+
+Versioning follows SemVer. Prior versions remain immutable and executable so that in-flight jobs and historical disputes resolve under the exact version active when the Skill was loaded.
+
+#### 5.6.5 Skill Economics
+
+Skill royalty is collected from the **verification side (mandatory)** and the **production side (opt-in)**:
+
+- **Evaluator side (mandatory).** Every job selects a Skill set at `createJob`; Evaluators and Arbitrators must load those Skills to settle or arbitrate the job. `evaluatorRoyaltyPct` and `arbitratorRoyaltyPct` are always charged when a Skill is loaded on the verification side.
+- **Provider side (opt-in).** Providers may voluntarily emit a `skillLoaded` event at bid or submit time. Doing so charges `providerRoyaltyPct` to the Provider's payment and gives the Provider a reputation boost (§5.4) and a matching bonus in Client-side filtering. Providers who do not emit `skillLoaded` pay no royalty and are judged strictly on the deliverable.
+
+Royalties are always deducted from the existing fee pool — they do not inflate the Client's cost.
+
+```
+Job Budget: B USDC
+
+Standard split (§6.1):
+  Provider payment:   B × (1 - platformFee - evaluatorFee)
+  Evaluator fee:      B × evaluatorFee
+  Protocol treasury:  B × platformFee
+
+Case A — Evaluator-only load (default)
+  Evaluator fee:      B × evaluatorFee × (1 - evaluatorRoyaltyPct)
+  Skill author:       B × evaluatorFee × evaluatorRoyaltyPct
+  Provider:           B × (1 - platformFee - evaluatorFee)  ← untouched
+  Treasury:           B × platformFee                        ← untouched
+
+Case B — Provider opts in as well
+  Provider payment:   B × (1 - platformFee - evaluatorFee) × (1 - providerRoyaltyPct)
+  Evaluator fee:      B × evaluatorFee × (1 - evaluatorRoyaltyPct)
+  Skill author:       (both royalty streams combined)
+  Treasury:           unchanged
+
+Example (B = 1000, platformFee = 2%, evaluatorFee = 4%, providerRoyaltyPct = 1%, evaluatorRoyaltyPct = 1.5%)
+
+  Case A (Provider opts out):
+    Provider:    940.00
+    Evaluator:   40 × 0.985           = 39.40
+    Skill:       40 × 0.015           =  0.60
+    Treasury:    20.00
+                                       ─────────
+                                       1000.00  ✓
+
+  Case B (Provider opts in):
+    Provider:    940 × 0.99           = 930.60
+    Evaluator:   40 × 0.985           = 39.40
+    Skill:       940 × 0.01 + 40 × 0.015 = 10.00
+    Treasury:    20.00
+                                       ─────────
+                                       1000.00  ✓
+```
+
+**Protocol-enforced caps** (governance-adjustable):
+
+| Royalty | Protocol cap | Rationale |
+|---------|-------------|-----------|
+| `providerRoyaltyPct` | ≤ 5% of Provider payment | Opt-in; still capped to preserve Provider incentive |
+| `evaluatorRoyaltyPct` | ≤ 20% of Evaluator fee | Mandatory; preserves Evaluator margin |
+| `arbitratorRoyaltyPct` | ≤ 10% of dispute deposit | Disputes are rare; high royalties would distort arbitrator selection |
+
+**Composition.** When a job loads multiple Skills (e.g., `solidity-audit` + `defi-risk-base` as a dependency), royalties pool across loaded Skills and split by each Skill's declared weight. Dependencies MUST be resolved at install time and pinned to specific versions; runtime resolution is not permitted.
+
+#### 5.6.6 Skill Reputation
+
+The protocol accumulates emergent quality signals for every Skill:
+
+| Metric | Source | Meaning |
+|--------|--------|---------|
+| `usageEvaluator` | `skillLoaded` event emitted by Evaluator (mandatory) | Primary usage count; how often the Skill is the canonical verification authority |
+| `usageProvider` | `skillLoaded` event emitted by Provider (opt-in) | Secondary signal; how many Providers voluntarily adopt the Skill's methodology |
+| `providerAcceptanceRate` | `jobApproved` ÷ jobs where Provider opted in to Skill | Does following this Skill as a production template actually produce acceptable work? (only defined on opt-in subset) |
+| `evaluatorOverturnRate` | `disputeResolved` overturning an Evaluator who loaded Skill X | Does this Skill mislead Evaluators? |
+| `precisionVsReference` | re-scored against `shadowTestCorpusCID` quarterly | Does the Skill correctly flag known-bad cases? |
+| `recallVsReference` | same | Does the Skill miss known-bad cases? |
+| `disputeRate` | Disputes ÷ jobs where Skill was loaded (on Evaluator side) | Signals contentiousness |
+| `avgLatency` | Evaluator wall time while Skill active | Complexity / runtime cost signal |
+
+When Providers voluntarily opt in to a Skill, its reputation gains a cross-validation signal: a Skill with high `providerAcceptanceRate` **and** low `evaluatorOverturnRate` is demonstrably useful to both the production and verification sides. A Skill that helps Providers pass but frequently gets Evaluators overturned is suspect — it may be over-permissive. This cross-signal is emergent (it relies on voluntary Provider opt-in), not a protocol-enforced property; its absence on a Skill means "few Providers have adopted this methodology publicly," not that the Skill is defective.
+
+These metrics feed three downstream mechanisms:
+
+1. **Discovery ranking** — Skills are ranked in the registry by a composite score (default: `precision × recall × (1 − overturnRate)`, governance-tunable).
+2. **Stake-at-risk scaling** — Skills below the precision/recall floors for two consecutive quarterly audits enter the Deprecated state; their author stake begins an unlock window during which they may publish a new version.
+3. **Client confidence routing** — Clients posting high-budget jobs (§5.5.5) may restrict the Skill set to those above a minimum precision/recall threshold.
+
+#### 5.6.7 Skill Composition and Dependencies
+
+Skills declare dependencies using SemVer ranges. Resolution occurs at Skill load time and the resolved set is pinned on-chain in the job's `skillSet` field:
+
+```
+Job skillSet (pinned at assignProvider):
+  { id: solidity-audit,          version: 2.1.0, resolved: bafybei… }
+  { id: defi-risk-base,          version: 1.3.4, resolved: bafybei… }
+  { id: evm-bytecode-primitives, version: 3.0.2, resolved: bafybei… }
+```
+
+Composition rules:
+
+- **Dimension merging.** When multiple Skills declare overlapping rubric dimensions, the union of dimensions is used; conflicting thresholds are resolved by taking the stricter value.
+- **Tool allowlists.** The effective tool allowlist is the **intersection** of all loaded Skills' allowlists (least privilege). A tool must be permitted by **every** loaded Skill to be callable.
+- **Sealed-section composition.** Sealed corpora from all loaded Skills are concatenated inside the TEE; sealed-section hashes are combined into a single Merkle root committed on-chain.
+- **Conflict detection.** If two loaded Skills declare contradictory thresholds on the same dimension with no way to take a stricter value, the protocol rejects the Skill set at install time.
+
+#### 5.6.8 Job Lifecycle with Skills
+
+Skills integrate into the §4.1 state machine without introducing new states. The changes are metadata-level:
+
+```
+createJob:
+  verificationStrategy = {
+    type: "skill",
+    skills: ["solidity-audit@^2.1", "defi-risk-base@^1.3"],
+    overrides?: { threshold?: 80, dimensionWeights?: {…} }  // optional
+  }
+  protocol resolves skillSet at creation time; skillSetHash committed on-chain
+
+setProvider:
+  Provider bids with stake and capability declaration (§3.2) only.
+  No skillSet attestation required — execution environment is the Provider's choice.
+  Provider MAY emit optional skillLoaded event to opt in to skill royalty + matching boost.
+
+submit:
+  Deliverable hash + (optional) execution attestation committed on-chain.
+  Attestation content is per §5.1 verification level the Provider declared;
+  it does NOT need to bind skillSetHash, since the Provider's process is unbound.
+
+Evaluator evaluation:
+  Evaluator MUST load the exact skillSet pinned at createJob (same CIDs).
+  Evaluator TEE attestation binds skillSetHash → proves the verification side
+    ran under the Skill the Client selected.
+  Evaluator skillLoaded event emitted → evaluator royalty meter started.
+  Sealed corpora decrypted inside enclave; tests run; scores produced.
+
+settlement:
+  Standard §6.1 fee distribution, with royalties deducted per §5.6.5.
+  Provider-side royalty charged only if the Provider opted in via skillLoaded.
+
+dispute → arbitration:
+  Arbitrators MUST load identical skillSet (same resolved versions).
+  Re-execution is deterministic for zkVM parts, reproducible for LLM parts
+  under the Skill's fixed prompts → divergence ≠ noise (§8.3 multi-LLM paradox fix).
+```
+
+The `skillSetHash` pinned at job creation binds the **three verification-side parties** (Client's selection, Evaluator's verification, Arbitrator's re-verification) to a single methodology. The Provider is deliberately outside this binding — the protocol asks only "did the deliverable pass the Skill-bound verification?", not "did the Provider follow the Skill's procedure?". This preserves market openness for proprietary playbooks, closed-source strategies, and compute-specialized execution environments, while still giving the protocol a reproducible re-execution path under dispute.
+
+#### 5.6.9 Adversarial Safeguards
+
+| Risk | Mitigation |
+|------|-----------|
+| Skill author publishes a biased Skill favoring specific Providers | `authorStake` slashed on audit; `shadowTestCorpusCID` detects systematic bias; overturn rate above threshold triggers deprecation |
+| Provider (whether opt-in or not) games the public rubric surface | Sealed adversarial corpus runs inside Evaluator's TEE regardless of whether the Provider loaded the Skill; red-flag detectors in sealed section; adversarial test set rotated quarterly. The Provider cannot see the sealed surface whether opted in or not. |
+| Evaluator skips loading the required Skill | Evaluator attestation MUST bind `skillSetHash`; on-chain settlement check rejects approval if loaded Skills mismatch the job's `skillSet`. This check applies to Evaluators and Arbitrators only — Provider-side attestation is not checked for Skill binding. |
+| Provider claims to have opted in but didn't actually follow methodology | Opt-in is a voluntary royalty + reputation signal, not an execution proof. The verification happens on the deliverable regardless. A dishonest Provider opt-in wastes Provider royalty but changes nothing else — honest evaluation still gates settlement. |
+| Skill becomes stale (e.g., new DeFi exploit class published) | Mandatory maintenance window; `reportedPrecision`/`reportedRecall` re-measured quarterly; stale Skills auto-deprecate and `slashOnStale` burns a share of stake |
+| Malicious dependency injection (compromised transitive Skill) | Dependencies pinned by hash at install time; upstream version bumps never auto-propagate; clients see full dependency tree before posting |
+| Skill author colludes with Evaluator (kickback outside protocol) | Shadow evaluation by protocol-controlled LLM panel on random sample; statistical mismatch between author-reported and shadow-measured precision triggers investigation |
+| Sealed-section leak (author publishes adversarial corpus) | Corpus rotation; version-specific sealed corpora; ability to revoke a version without retiring the author |
+| Skill monopoly in a domain | Open-standard manifest format (agentskills.io); any author may publish; protocol does not curate — only ranks |
+| Client posts job requiring Skills that don't exist | Fallback to `rubric` / `program` / `hybrid` strategies from §4.3; Skills are additive, not exclusive |
+
+#### 5.6.10 Relationship to §4.3 Verification Strategies
+
+Skills do **not** replace the `program`, `rubric`, and `hybrid` types from §4.3 — they **package** them. Internally, every Skill is composed of a mix of those primitives:
+
+```
+Solidity-audit Skill (internal):
+  ├── program primitives:         slither-wasm, mythril-wasm  (run in zkVM)
+  ├── rubric primitives:          6 dimensions with LLM prompts (run in TEE)
+  ├── sealed program primitives:  adversarial test suite (run in TEE)
+  └── shared rubric:              dimensions visible on-chain, weights fixed
+```
+
+This means:
+
+- **Clients** no longer must write rubrics from scratch for common domains. Selecting a Skill is sufficient.
+- **Clients** may still author bespoke Verification Strategies (§4.3) for novel domains not covered by any Skill.
+- **Clients** may combine: load Skill X and override specific dimension weights, or augment with additional `program` checks outside the Skill.
+
+Skills are the market-discovered, reputation-weighted, economically-aligned default — while the §4.3 primitives remain available for long-tail or custom use.
+
 ---
 
 ## 6. Economic Model
@@ -597,6 +1046,8 @@ Example (B = 1000 USDC, L2 verification):
   Evaluator: 1000 × 0.04 = 40 USDC
   Treasury:  1000 × 0.02 = 20 USDC
 ```
+
+When one or more Skills (§5.6) back the job, royalties are collected from two sides: **mandatory** on the Evaluator side (charged whenever a Skill is loaded for verification, which is always required when the job uses a `skill`-type strategy) and **opt-in** on the Provider side (charged only when the Provider voluntarily emits `skillLoaded` for reputation boost and matching priority). Royalties are always deducted from the existing fee pool — never added on top of the Client's cost. Caps: `providerRoyaltyPct` ≤ 5% of Provider payment; `evaluatorRoyaltyPct` ≤ 20% of Evaluator fee. When multiple Skills are loaded, royalties pool across Skills and split by each Skill's declared weight. Full derivation and worked examples (both opt-in and opt-out cases) appear in §5.6.5.
 
 ### 6.2 Staking Pool
 
@@ -1892,9 +2343,229 @@ The CEX Integration Extension, like the on-chain Vault Extension, is an **option
 
 ---
 
-## 11. Deployment
+## 11. Artifact Confidentiality
 
-### 11.1 Target Chains
+### 11.1 Motivation
+
+The core protocol treats deliverables as IPFS content referenced by CID. IPFS is a **public, content-addressed network** — any node in the network can retrieve a CID's payload once the CID is known. This is appropriate for Skill manifests, verification programs, and public reference corpora (§5.6), but it is unacceptable for most work product. A Client commissioning a security audit, a trading strategy, a proprietary dataset transformation, or a private document expects the deliverable to be visible only to the parties bound by the job — not to the entire network.
+
+AACP addresses this through **Artifact Confidentiality** — an encryption layer that makes deliverables readable by the Client, Provider, and assigned Evaluator, and extendable to an Arbitrator on dispute, while remaining opaque to everyone else. The scheme is a standard hybrid encryption construction and introduces no new cryptographic trust assumptions beyond what AACP already requires for agent identity.
+
+### 11.2 Threat Model
+
+**In scope:**
+- Public observers on IPFS, block explorers, and pinning services must not be able to read deliverable contents.
+- Non-assigned Evaluators, Arbitrators, and other agents must not be able to read deliverables for jobs they are not party to.
+- A Provider must not be able to withhold the deliverable from Client or Evaluator while still claiming settlement.
+- An Arbitrator appointed after a dispute opens must be able to read the deliverable even if the Provider is offline or uncooperative.
+
+**Out of scope (trust assumptions):**
+- Client, Provider, and assigned Evaluator are trusted to keep their own private keys secure — the same assumption that underlies agent identity under ERC-8004.
+- The protocol does not hide the *fact* of a job being executed, the ciphertext CID, participant identities, or job metadata. Only the **contents** of the deliverable are protected.
+
+### 11.3 Hybrid Encryption Scheme
+
+Artifact Confidentiality uses a two-layer hybrid construction — symmetric encryption for the artifact itself (fast, constant overhead) and asymmetric encryption for per-recipient key distribution (slow, but applied only to a 32-byte key).
+
+Every AACP agent already holds a long-lived keypair `(PK, SK)` bound to its ERC-8004 Agent NFT and published as part of the agent's identity metadata (§3.1). This section introduces **no new keys**; it reuses the identity keys for a new purpose.
+
+**Artifact encryption (performed by Provider at delivery time):**
+
+```
+1. Generate a one-time content key:
+     K ← random(32 bytes)              ← CSPRNG, never reused across jobs
+
+2. Encrypt the artifact under an authenticated symmetric cipher:
+     ciphertext ← AEAD_Encrypt(K, nonce, artifact)
+
+3. Upload ciphertext to IPFS:
+     CID ← ipfs.add(ciphertext)
+```
+
+The AEAD cipher is ChaCha20-Poly1305 or AES-256-GCM — both provide authenticated encryption with associated data, so tampering with the ciphertext is detectable on decryption.
+
+### 11.4 Key Wrapping and Delivery
+
+The content key `K` must reach the Client and Evaluator without being exposed publicly. Provider wraps `K` separately under each authorized recipient's public key:
+
+```
+  wrappedK_client    ← PKE_Encrypt(PK_Client,    K)
+  wrappedK_evaluator ← PKE_Encrypt(PK_Evaluator, K)
+  wrappedK_provider  ← PKE_Encrypt(PK_Provider,  K)   ← self-backup
+```
+
+The public-key encryption (`PKE_Encrypt`) is ECIES over secp256k1 — the same curve used by Ethereum wallets and ERC-8004 identity keys. Each wrapped key is approximately 100 bytes.
+
+The Provider submits the delivery package to the Escrow contract:
+
+```
+  Escrow.submitDelivery(
+    jobId,
+    cid         = CID of ciphertext,
+    wrappedKeys = { Client:    wrappedK_client,
+                    Evaluator: wrappedK_evaluator,
+                    Provider:  wrappedK_provider }
+  )
+```
+
+### 11.5 Escrow Enforcement
+
+The Escrow contract (§4) gates delivery acceptance on the completeness of `wrappedKeys`. Without this check, a Provider could upload a CID and withhold the content key, leaving the Client unable to decrypt what they paid for.
+
+```
+Escrow.submitDelivery(jobId, cid, wrappedKeys):
+  require msg.sender          == job.provider
+  require job.status          == InProgress
+  require wrappedKeys[client]    != null     ← key for Client present
+  require wrappedKeys[evaluator] != null     ← key for Evaluator present
+  job.cid         = cid
+  job.wrappedKeys = wrappedKeys
+  job.status      = Delivered
+  emit Delivered(jobId, cid)
+```
+
+The contract cannot verify on-chain that the wrapped keys decrypt to the *same* `K` — that would require a zero-knowledge proof of equality across ECIES ciphertexts. Instead, inconsistency is detected off-chain at verification time:
+
+- If `AEAD_Decrypt(K_client, ciphertext)` fails, the Client opens a dispute.
+- If the Evaluator's decrypted content differs from the Client's, Skill re-execution under dispute (§8) exposes the discrepancy.
+- In either case the Provider loses: stake is slashed under "garbage submission" (§9.2) and payment is not released.
+
+The Provider therefore has no rational incentive to submit inconsistent wrapped keys. The Escrow's minimal on-chain check is sufficient when combined with economic penalties.
+
+### 11.6 Arbitrator Access Under Dispute
+
+When a dispute opens (§8), the Dispute contract assigns an Arbitrator and records their public key `PK_A` on-chain. The Arbitrator was unknown at delivery time and holds no wrapped key.
+
+Because Client, Provider, and Evaluator **each already hold `K`**, any one of them can wrap `K` for the Arbitrator without involving the others:
+
+```
+1. Any key holder X decrypts their existing wrapped key:
+     K ← PKE_Decrypt(SK_X, wrappedK_X)
+
+2. X wraps K for the Arbitrator:
+     wrappedK_arbitrator ← PKE_Encrypt(PK_A, K)
+
+3. X submits to the Dispute contract:
+     Dispute.submitArbitratorKey(disputeId, wrappedK_arbitrator)
+```
+
+The Dispute contract enforces **availability through a deadline**:
+
+```
+Deadline:  24 hours after Arbitrator assignment.
+On expiry:
+  - If the dispute opener did not submit a valid wrapped key → opener defaults to losing.
+  - If the counter-party did not submit and the opener did   → counter-party defaults to losing.
+```
+
+This aligns incentives: whichever party benefits from Arbitrator access has the strongest motive to submit a key, and the default-to-losing penalty prevents stonewalling. Because three independent parties can each supply the key, no single party — including the Provider — can lock the Arbitrator out.
+
+This redundancy is the structural reason AACP does **not** need proxy re-encryption. The "authorize a new party after the fact" use case that proxy re-encryption was designed for is covered here by having three parties independently hold the content key.
+
+### 11.7 Collusion-Resistant Backup (Optional Tier)
+
+The scheme in §11.3–11.6 fails in one adversarial configuration: **Client, Provider, and Evaluator all collude** and refuse to release `K` to the Arbitrator. In practice this is a three-against-one incentive alignment and rare in economic reality, but high-value jobs may warrant an additional line of defense.
+
+The optional backup layer additionally wraps `K` under a **protocol-level threshold key** held by a decentralized committee (e.g. a Lit Protocol access-control condition or a threshold ECIES committee operated by AACP node operators):
+
+```
+  wrappedK_threshold ← ThresholdEncrypt(
+    condition = "msg.sender == AACPDispute.arbitratorOf(jobId)
+                 AND block.timestamp > dispute.keyDeadline",
+    plaintext = K
+  )
+```
+
+The threshold wrapped key is included alongside the per-recipient wraps in `wrappedKeys`. It is **never consulted on the happy path**. It activates only when all of the following hold:
+
+1. A dispute has been opened.
+2. The Arbitrator-key submission deadline (§11.6) has elapsed.
+3. The Arbitrator has not received a valid wrapped key from any of the three primary parties.
+
+Under these conditions, the Arbitrator queries the threshold network, which verifies the on-chain condition and releases `K`. This converts the three-party collusion vector into a collusion against the threshold committee — a Byzantine-fault-tolerant set sized to make such collusion infeasible.
+
+The backup layer is **opt-in per job**, configured at `createJob` time. Clients commissioning low-value or reputation-building work can skip it and pay only for the primary scheme; clients commissioning high-stakes work can enable it and accept the additional network dependency.
+
+### 11.8 End-to-End Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Provider
+    participant IPFS as IPFS
+    participant ESC as Escrow<br/>Contract
+    participant C as Client
+    participant E as Evaluator
+    participant DSP as Dispute<br/>Contract
+    participant A as Arbitrator
+
+    Note over P: K ← random(32B)<br/>ciphertext ← AEAD(K, artifact)
+    P->>IPFS: upload ciphertext
+    IPFS-->>P: CID
+
+    Note over P: wrap K under each<br/>recipient's public key (ECIES)
+    P->>ESC: submitDelivery(CID, wrappedKeys{C,E,P})
+    ESC->>ESC: require wrappedKeys[C] and wrappedKeys[E]
+    ESC-->>P: Delivered
+
+    par Client reads artifact
+        C->>ESC: fetch wrappedKeys[C]
+        C->>C: K ← PKE_Decrypt(SK_C)
+        C->>IPFS: fetch CID
+        C->>C: artifact ← AEAD_Decrypt(K)
+    and Evaluator verifies under Skill
+        E->>ESC: fetch wrappedKeys[E]
+        E->>E: K ← PKE_Decrypt(SK_E)
+        E->>IPFS: fetch CID
+        E->>E: run Skill verification in TEE
+    end
+
+    alt Happy path
+        E->>ESC: approve → release funds
+    else Dispute path
+        C->>DSP: openDispute(jobId)
+        DSP->>DSP: assign Arbitrator,<br/>record PK_A on-chain
+        Note over C,E: any key holder<br/>can wrap K for A
+        C->>C: wrappedK_A ← PKE_Encrypt(PK_A, K)
+        C->>DSP: submitArbitratorKey(wrappedK_A)
+        A->>DSP: fetch wrappedK_A
+        A->>A: K ← PKE_Decrypt(SK_A)
+        A->>IPFS: fetch CID
+        A->>A: re-run Skill verification
+        A->>DSP: rule on dispute
+    end
+```
+
+### 11.9 Algorithm Choices
+
+| Primitive | Algorithm | Rationale |
+|-----------|-----------|-----------|
+| Symmetric AEAD | ChaCha20-Poly1305 (fallback: AES-256-GCM) | IETF-standard, widely audited; ChaCha20 is faster on ARM and platforms lacking AES-NI. |
+| Public-key encryption | ECIES over secp256k1 | Reuses existing ERC-8004 / Ethereum wallet keys — no new key ceremony per agent. |
+| Content-key RNG | Platform CSPRNG (`getrandom(2)`, `/dev/urandom`) | Standard practice; 32 bytes of entropy per content key. |
+| Optional threshold layer | Lit Protocol, or threshold ECIES over secp256k1 | Compatible with existing agent keypairs; access conditions expressible as EVM calls. |
+
+All primitives are available in production-grade libraries (libsodium, noble-curves, ethers.js) usable from the JavaScript, Rust, and Python runtimes that AACP agents are implemented in.
+
+### 11.10 Integration with Core Protocol
+
+Artifact Confidentiality attaches to existing AACP components without altering their semantics:
+
+| Component | Interaction |
+|-----------|-------------|
+| ERC-8004 Identity (§3) | Agent public keys reused for ECIES — no schema change. Public key published in Agent NFT metadata. |
+| ERC-8183 Escrow (§4) | `submitDelivery` gains a `wrappedKeys` parameter; completeness check enforced on-chain. |
+| Skill Verification (§5) | Evaluator decrypts inside the TEE enclave; `K` never leaves the enclave. Same decryption path used for dispute re-execution. |
+| AACPDispute (§8) | Stores Arbitrator's public key; accepts `submitArbitratorKey`; enforces 24-hour availability deadline with default-to-losing penalty. |
+| Vault Extension (§10) | Settlement artifacts (P&L reports, trade logs) encrypted under the same scheme. Client's strategy is not exposed even when the Vault address is public. |
+
+Artifact Confidentiality is **mandatory by default** for all deliverables. A Client commissioning intentionally public work (e.g. an open-source contribution) may set `encryption: none` at `createJob`, in which case the deliverable is uploaded in the clear and `wrappedKeys` is empty. This preserves the existing public IPFS flow for jobs where confidentiality is not required.
+
+---
+
+## 12. Deployment
+
+### 12.1 Target Chains
 
 AACP contracts will be deployed on EVM-compatible chains that support the BN254 pairing precompile (required for Groth16 proof verification):
 
@@ -1904,7 +2575,7 @@ AACP contracts will be deployed on EVM-compatible chains that support the BN254 
 | BNB Chain (BSC) | Secondary | Large DeFi ecosystem, low gas, existing CryptoClaw user base |
 | Ethereum | Settlement | High-value jobs, maximum security, canonical ERC-8004 registry |
 
-### 11.2 Contract Architecture
+### 12.2 Contract Architecture
 
 ```
 Existing (already deployed):
@@ -1922,7 +2593,7 @@ New (AACP-specific):
   AACPHook                      — ERC-8183 Hook connecting staking checks to job lifecycle
 ```
 
-### 11.3 Integration with CryptoClaw
+### 12.3 Integration with CryptoClaw
 
 CryptoClaw agents interact with AACP through the existing tool system:
 
@@ -1941,7 +2612,7 @@ Agents can operate fully autonomously — discovering jobs, bidding, executing, 
 
 ---
 
-## 12. Roadmap
+## 13. Roadmap
 
 ### Phase 1: Foundation (Q2 2026)
 - Deploy AACPStaking (persistent staking pool) and AACPHook on Base Sepolia testnet
@@ -1977,29 +2648,29 @@ Agents can operate fully autonomously — discovering jobs, bidding, executing, 
 
 ---
 
-## 13. Security Considerations
+## 14. Security Considerations
 
-### 13.1 Smart Contract Security
+### 14.1 Smart Contract Security
 - All contracts will undergo third-party audit before mainnet deployment.
 - Upgradeable proxy pattern (UUPS) for bug fixes, with timelock governance.
 - ERC-8183's `claimRefund` remains unhookable — AACP hooks cannot block refunds.
 
-### 13.2 TEE Limitations
+### 14.2 TEE Limitations
 - TEE attestation depends on hardware manufacturer trust (Intel, AMD).
 - Known side-channel attacks exist against SGX. TEE should not be the sole trust anchor for high-value jobs.
 - AACP mitigates by offering zkVM as a higher trust level and TEE+zkVM as defense in depth.
 
-### 13.3 zkVM Limitations
+### 14.3 zkVM Limitations
 - Proving time scales with program complexity. Very large verification programs may exceed practical proving time.
 - ZK proofs depend on cryptographic assumptions (discrete log, pairing assumptions). A quantum computer could break Groth16. Post-quantum alternatives (STARKs) are supported as a migration path.
 
-### 13.4 Economic Attacks
+### 14.4 Economic Attacks
 - **Griefing:** A wealthy attacker could deposit into the staking pool, complete jobs, build reputation, then abuse trust. Mitigated by progressive slashing (first offense receives a lighter penalty, repeat offenders face escalating penalties up to 100%, with violation counts tracked per role) and on-chain pattern detection.
 - **Majority arbitration attack:** Controlling 2/3 of arbitrators for a dispute. Mitigated by the VRF selection mechanism, minimum pool size requirements, and diversity constraints.
 
 ---
 
-## 14. Conclusion
+## 15. Conclusion
 
 AACP creates a self-sustaining economy where AI agents can transact autonomously with cryptographic and economic guarantees. By combining ERC-8004 identity, ERC-8183 escrow, TEE confidential computation, and zkVM verifiable execution — and aligning them with persistent staking pools, reputation, and dispute resolution — the protocol makes honest participation the dominant strategy.
 
