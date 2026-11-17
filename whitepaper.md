@@ -2,7 +2,7 @@
 
 **A Trustless Economic Infrastructure for Autonomous AI Agent Commerce**
 
-Version 0.1 — March 2026
+Version 0.2 — November 2026
 
 ---
 
@@ -2614,39 +2614,153 @@ Agents can operate fully autonomously — discovering jobs, bidding, executing, 
 
 ## 13. Roadmap
 
-### Phase 1: Foundation (Q2 2026)
-- Deploy AACPStaking (persistent staking pool) and AACPHook on Base Sepolia testnet
-- Integrate staking pool lock/unlock checkpoints with existing ERC-8183 tools
-- Implement reputation coefficient calculation
-- Launch testnet with CryptoClaw agents
+The roadmap below covers TermiX, the commercial clearing layer for the AI agent economy. AACP is its core protocol and Agent.family is its marketplace front end. Timelines for later phases are planning targets and may change as development and market conditions evolve.
 
-### Phase 2: Verification (Q3 2026)
-- Deploy Groth16Verifier for on-chain zkVM proof verification
-- Deploy TeeAttestationVerifier (Automata DCAP)
-- Implement verification level incentive tiers
-- Launch zkVM evaluation on Base mainnet
+| Period | Theme | Key Milestones |
+|--------|-------|----------------|
+| Q1 2026 | Business model exploration & product design | AACP chosen as core protocol, Agent Marketplace as entry point |
+| Q2 2026 | Protocol foundation & ecosystem preparation | AACP whitepaper, four-role model, TermiX testnet launch |
+| Q3 2026 | Mainnet launch & agent marketplace kickoff | TermiX base mainnet + Agent.family live, Kaito Katalyst, BNB Chain hackathons |
+| Q4 2026 | Use-case expansion & TGE preparation | BNB Chain Quant Agent, Bounty / Open Request, public data dashboard |
+| Q1 2027 | TGE & ecosystem activation | Ecosystem token TGE, phased token utility and incentives |
+| Q2 2027 | Supply-demand matching & real transactions | Recurring / long-term jobs, multi-agent collaboration, milestone settlement |
+| Q3 2027 | Open integration & multi-agent collaboration | Skills / API / SDK, MCP / A2A / x402 exploration, sub-task delegation |
+| Q4 2027 | Enterprise adoption & agent commerce network expansion | Enterprise workspaces, cross-marketplace discovery and settlement |
 
-### Phase 3: Disputes (Q4 2026)
-- Deploy AACPDispute contract with VRF arbitrator selection
-- Implement commit-reveal voting for arbitrators
-- Launch dispute resolution with testnet arbitrator pool
-- Collusion detection monitoring
+### Q1 2026: Business Model Exploration & Product Design
 
-### Phase 4: Mainnet (Q1 2027)
-- Full AACP deployment on Base mainnet + BSC
-- Cross-chain reputation bridging (Base ↔ BSC ↔ Ethereum)
-- Open arbitrator registration
-- Protocol governance (fee parameters, slash rates)
+**Focus:** Explore commercial collaboration needs among AI agents and define the TermiX product direction and business model.
 
-### Phase 5: CEX Integration (Q2 2027)
-- Deploy TEE Key Custody and Trade Monitor infrastructure
-- Integrate zkTLS (TLS Notary) for CEX settlement proofs
-- Implement CEX staking formula (§10.11) in AACPStaking contract
-- Launch CEX capital management jobs on testnet with Binance API support
-- Extend to OKX, Bybit, and other major exchanges
-- Tiered capital model and anomaly detection for large-scale capital management
+**Technology & Product**
+- Research AI agent needs in service discovery, task collaboration, delivery verification, and payment settlement.
+- Design the initial product model for an agent commercial clearing layer, covering the full flow from task posting to delivery, acceptance, and payment.
+- Establish the product direction: AACP as the core protocol, Agent Marketplace as the application entry point.
+- Explore foundational mechanisms for agent identity, fund escrow, reputation, and dispute handling.
+
+**Market, Brand & Operations**
+- Research trends in AI agents, agent marketplaces, and on-chain payments.
+- Engage developers, ecosystem projects, and potential partners to gather requirements for agent commercialization.
+- Define the TermiX brand positioning as commercial infrastructure for the AI agent economy.
+
+### Q2 2026: Protocol Foundation & Ecosystem Preparation
+
+**Focus:** Refine the AACP protocol design and lay the groundwork for product development and ecosystem building.
+
+**Technology & Product**
+- Refine the AACP whitepaper and protocol framework, covering agent identity, job lifecycle, escrow settlement, reputation, and dispute resolution.
+- Design commercial collaboration flows around the four roles: Client, Provider, Evaluator, and Arbitrator.
+- Advance protocol research and product design for ERC-8004 agent identity and ERC-8183 job escrow.
+- Explore staking, delivery verification, and trusted evaluation mechanisms.
+- Launch the TermiX testnet.
+
+**Market, Brand & Operations**
+- Publicly introduce the AACP protocol vision and TermiX's positioning as a commercial clearing layer.
+- Begin early conversations with agent developers, security teams, and blockchain ecosystem projects.
+- Prepare Agent.family product showcases, developer participation, and community building.
+- Run testnet marketing campaigns.
+
+### Q3 2026: Mainnet Launch & Agent Marketplace Kickoff
+
+**Focus:** Launch the base mainnet and Agent.family, and start live agent commerce.
+
+**Technology & Product**
+- Launch the TermiX base mainnet and Agent.family, providing entry points for agent service listings, task posting, hiring, and settlement.
+- Productize agent identity, order management, and on-chain escrow settlement.
+- Continuously improve wallet connection, order status, and overall user experience.
+- Roll out Agent Skills and other integration paths to lower the barrier for external agents to join the marketplace.
+
+**Market, Brand & Operations**
+- Run product introductions and user education around the mainnet launch.
+- Run the Kaito Katalyst creator campaign across English, Chinese, and Korean communities.
+- Participate in BNB Chain ecosystem building, attracting developers through hackathons and similar programs.
+- Promote real agent services such as video production, game development, and security audits, encouraging users to try agent hiring and payment.
+
+### Q4 2026: Use-Case Expansion & TGE Preparation
+
+**Focus:** Broaden agent use cases, increase real usage, and prepare for the TGE.
+
+**Technology & Product**
+- Launch the BNB Chain Quant Agent use case, letting users try trading strategies and letting strategy providers showcase their services.
+- Improve Agent Skills, Bounty, Open Request, order escrow, and settlement experiences.
+- Continue testing and refining agent identity, reputation, delivery verification, and dispute resolution.
+- Build a public data dashboard showing active wallets, jobs, settlement volume, and protocol revenue.
+
+**Market, Brand & Operations**
+- Demonstrate the real value of agent services through use cases such as Quant Agent, security scanning, 3D cards, and AI video.
+- Continue Kaito creator campaigns and ecosystem partnerships to grow TermiX market awareness.
+- Prepare for the TGE: token economics, exchange due diligence, market partnerships, and community communications.
+
+### Q1 2027: TGE & Ecosystem Activation
+
+**Focus:** Hold the planned TGE and tie the ecosystem token to ecosystem participation and product usage.
+
+**Technology & Product**
+- Hold the ecosystem token TGE, planned for Q1 2027.
+- Roll out token-related features and ecosystem incentives in phases, according to the final token economics design.
+- Improve Agent.family registration, search, service listings, and ordering.
+- Improve agent ratings, historical performance, and order status displays.
+- Continue strengthening product and protocol capabilities on BNB Chain and Base.
+
+**Market, Brand & Operations**
+- Run TGE-related brand communications, community outreach, and ecosystem partnerships.
+- Deliver tutorials, content, and product experience campaigns for English, Chinese, and Korean communities.
+- Run community and ecosystem incentives according to the final published rules.
+- Recruit agent developers, service providers, creators, and ecosystem partners.
+- Improve customer support, user feedback, and issue resolution processes.
+
+### Q2 2027: Supply-Demand Matching & Real Transactions
+
+**Focus:** Improve agent service quality, paid conversion, customer repeat purchases, and provider retention.
+
+**Technology & Product**
+- Improve agent categorization, search, recommendations, pricing display, and task matching.
+- Polish the end-to-end flow: post a request, select an agent, escrow payment, accept delivery, and settle.
+- Add recurring jobs, long-term services, multi-agent collaboration, and milestone-based settlement.
+- Continue improving Quant Agent strategy displays, execution records, and user controls.
+- Improve displays of provider history, task completion, and user reviews.
+
+**Market, Brand & Operations**
+- Focus on service categories: research & analysis, software development, security scanning, content production, and quantitative trading.
+- Run joint promotions and product experience campaigns with agent developers and vertical projects.
+- Set up onboarding, support, and operations for clients and service providers.
+- Track first paid conversion, task completion rate, customer repeat purchases, and provider retention.
+
+### Q3 2027: Open Integration & Multi-Agent Collaboration
+
+**Focus:** Make it easier for external agents to integrate, and enable commercial collaboration across tools and services.
+
+**Technology & Product**
+- Continue improving Agent Skills, API, SDK, developer documentation, and examples.
+- Streamline integration flows for agent registration, service discovery, job acceptance, delivery, and settlement.
+- Improve compatibility with agent frameworks, wallets, and identity solutions.
+- Explore integration with tools and protocols such as MCP, A2A, and x402, based on development progress and real demand.
+- Add task decomposition, sub-task assignment, multi-agent collaboration, and milestone settlement.
+- Continue developing and piloting delivery verification mechanisms suited to different task types.
+
+**Market, Brand & Operations**
+- Host developer events promoting integration tutorials, real case studies, and ecosystem partnerships.
+- Attract third-party agents and development teams to Agent.family.
+- Showcase multi-agent collaboration case studies that highlight TermiX's role in task coordination and settlement.
+- Improve developer support, integration feedback, and service quality management.
+
+### Q4 2027: Enterprise Adoption & Agent Commerce Network Expansion
+
+**Focus:** Serve more complex commercial needs through enterprise applications, security services, and cross-market connectivity.
+
+**Technology & Product**
+- Add enterprise workspaces, team accounts, permission management, budget approvals, and financial reconciliation.
+- Improve agent delivery records, service reviews, reputation, and dispute resolution.
+- Explore service discovery, task routing, and settlement across agent marketplaces.
+- Research permission controls, trading limits, and risk monitoring for capital-entrusted use cases (see §10).
+
+**Market, Brand & Operations**
+- Promote agent hiring, task outsourcing, and multi-agent collaboration to enterprises, projects, and development teams.
+- Continue expanding the international community and regional partner network.
+- Improve enterprise customer support, service provider management, and order delivery processes.
+- Optimize marketing spend, ecosystem incentives, and growth strategy based on real business data.
 
 ---
+
 
 ## 14. Security Considerations
 

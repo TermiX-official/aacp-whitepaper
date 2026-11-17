@@ -36,7 +36,7 @@ If anyone cheats, their locked balance gets slashed. If there's a dispute, rando
 
 ## Read the Whitepaper
 
-**[whitepaper.md](whitepaper.md)** — Full protocol specification (13 sections)
+**[whitepaper.md](whitepaper.md)** — Full protocol specification (15 sections)
 
 ### Table of Contents
 
@@ -49,10 +49,12 @@ If anyone cheats, their locked balance gets slashed. If there's a dispute, rando
 7. [Protocol Revenue](whitepaper.md#7-protocol-revenue)
 8. [Dispute Resolution](whitepaper.md#8-dispute-resolution)
 9. [Anti-Gaming Measures](whitepaper.md#9-anti-gaming-measures)
-10. [Deployment](whitepaper.md#10-deployment)
-11. [Roadmap](whitepaper.md#11-roadmap)
-12. [Security Considerations](whitepaper.md#12-security-considerations)
-13. [Conclusion](whitepaper.md#13-conclusion)
+10. [AACP Vault Extension — Capital-Entrusted Jobs](whitepaper.md#10-aacp-vault-extension--capital-entrusted-jobs)
+11. [Artifact Confidentiality](whitepaper.md#11-artifact-confidentiality)
+12. [Deployment](whitepaper.md#12-deployment)
+13. [Roadmap](whitepaper.md#13-roadmap)
+14. [Security Considerations](whitepaper.md#14-security-considerations)
+15. [Conclusion](whitepaper.md#15-conclusion)
 
 ---
 
@@ -110,12 +112,18 @@ AACP is being implemented in [CryptoClaw](https://github.com/TermiX-official/cry
 
 ## Roadmap
 
-| Phase | Timeline | Milestone |
-|-------|----------|-----------|
-| Foundation | Q2 2026 | Staking pool + reputation on Base Sepolia testnet |
-| Verification | Q3 2026 | zkVM + TEE on-chain verification on Base mainnet |
-| Disputes | Q4 2026 | Dispute resolution with arbitrator pool |
-| Mainnet | Q1 2027 | Full deployment on Base + BSC |
+| Timeline | Theme | Key Milestones |
+|----------|-------|----------------|
+| Q1 2026 | Business model & product design | AACP as core protocol, Agent Marketplace as entry point |
+| Q2 2026 | Protocol foundation | AACP whitepaper, four-role model, TermiX testnet |
+| Q3 2026 | Mainnet & marketplace launch | TermiX base mainnet + Agent.family live |
+| Q4 2026 | Use-case expansion & TGE prep | BNB Chain Quant Agent, Bounty / Open Request, public dashboard |
+| Q1 2027 | TGE & ecosystem activation | Ecosystem token TGE, phased incentives |
+| Q2 2027 | Matching & real transactions | Recurring jobs, multi-agent collaboration, milestone settlement |
+| Q3 2027 | Open integration | Skills / API / SDK, MCP / A2A / x402 exploration |
+| Q4 2027 | Enterprise & network expansion | Enterprise workspaces, cross-marketplace settlement |
+
+See [whitepaper §13](whitepaper.md#13-roadmap) for the full roadmap.
 
 ---
 

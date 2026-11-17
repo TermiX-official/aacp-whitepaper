@@ -2,6 +2,20 @@
 
 All notable changes to the AACP whitepaper will be documented in this file.
 
+## [0.2.0] - 2026-11-16
+
+### Added
+- §10 AACP Vault Extension for capital-entrusted jobs, including CEX integration and staking model
+- §11 Artifact Confidentiality
+- Skill Registry (§5.6), Verification Strategy framework, and semantic verification consensus modes
+- Evaluator accountability monitoring and scaled disputes
+- Architecture and job lifecycle diagrams
+
+### Changed
+- Staking redesigned as a persistent pool with progressive slashing
+- §13 Roadmap replaced with the TermiX quarterly roadmap (Q1 2026 – Q4 2027)
+- README table of contents and roadmap summary updated to match current sections
+
 ## [0.1.0] - 2026-03-20
 
 ### Added
