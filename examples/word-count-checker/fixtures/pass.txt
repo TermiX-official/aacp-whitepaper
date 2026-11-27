@@ -1,0 +1,1 @@
+An agent submits this short research summary with twenty words so the deterministic verifier can demonstrate an accepted document result.

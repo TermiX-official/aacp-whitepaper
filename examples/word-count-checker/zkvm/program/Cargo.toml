@@ -1,0 +1,13 @@
+[package]
+name = "aacp-word-count-guest"
+version = "0.1.0"
+edition = "2021"
+license = "CC-BY-SA-4.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+aacp-word-count-checker = { path = "../.." }
+sp1-zkvm = "=6.10.0"
+sha2 = { version = "=0.10.9", default-features = false }
