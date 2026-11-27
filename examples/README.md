@@ -16,7 +16,12 @@ Example programs that Clients can attach to ERC-8183 jobs. These define the acce
 |---------|----------|-------------|
 | `erc20-checker/` | Rust | Verifies an ERC-20 contract has required functions |
 | `json-schema-validator/` | Rust | Validates JSON deliverable against a schema |
-| `word-count-checker/` | Rust | Checks document meets minimum word count |
+| [`word-count-checker/`](word-count-checker/) | Rust | Bounded native reference and `no_std` counting core; zkVM adapter not included |
+
+The word-count checker includes runnable pass/fail fixtures and native tests.
+The ERC-20 and JSON-schema entries above remain planned examples; their source
+directories are not included yet. The zkVM build commands below describe the
+intended guest workflow, not a verified build of the native word-count CLI.
 
 ## Building
 

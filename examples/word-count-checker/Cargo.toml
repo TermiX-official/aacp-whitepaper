@@ -1,0 +1,9 @@
+[package]
+name = "aacp-word-count-checker"
+version = "0.1.0"
+edition = "2021"
+license = "CC-BY-SA-4.0"
+publish = false
+description = "Bounded deterministic document acceptance example for AACP"
+
+[dependencies]
