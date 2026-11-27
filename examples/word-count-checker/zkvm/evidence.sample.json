@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "mode": "real-zkvm-execution-only",
+  "proofGenerated": false,
+  "paidServiceUsed": false,
+  "elfArchitecture": "riscv64",
+  "elfSha256": "9272cfbd5cad27ac6159e5b535a3bcb26dc74c77959faae7de71381e08c88648",
+  "cases": [
+    {
+      "case": "threshold-20",
+      "backend": "sp1-6.10.0-light-execution",
+      "proofGenerated": false,
+      "accepted": true,
+      "code": 0,
+      "words": 20,
+      "inputSha256": "28c51cf74fce761ca52ea4da81cf52c0cd26d7333cc32424bac847e18af1c7f8",
+      "elfSha256": "9272cfbd5cad27ac6159e5b535a3bcb26dc74c77959faae7de71381e08c88648",
+      "instructions": 14392
+    },
+    {
+      "case": "threshold-19",
+      "backend": "sp1-6.10.0-light-execution",
+      "proofGenerated": false,
+      "accepted": false,
+      "code": 1,
+      "words": 19,
+      "inputSha256": "e505e239de8c822d37462b1ea3e1c1ab5b36399d658c2b609bfad63f1155de91",
+      "elfSha256": "9272cfbd5cad27ac6159e5b535a3bcb26dc74c77959faae7de71381e08c88648",
+      "instructions": 14382
+    },
+    {
+      "case": "empty",
+      "backend": "sp1-6.10.0-light-execution",
+      "proofGenerated": false,
+      "accepted": false,
+      "code": 1,
+      "words": 0,
+      "inputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elfSha256": "9272cfbd5cad27ac6159e5b535a3bcb26dc74c77959faae7de71381e08c88648",
+      "instructions": 9357
+    },
+    {
+      "case": "invalid-utf8",
+      "backend": "sp1-6.10.0-light-execution",
+      "proofGenerated": false,
+      "accepted": false,
+      "code": 3,
+      "words": 0,
+      "inputSha256": "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89",
+      "elfSha256": "9272cfbd5cad27ac6159e5b535a3bcb26dc74c77959faae7de71381e08c88648",
+      "instructions": 9374
+    },
+    {
+      "case": "limit-65536",
+      "backend": "sp1-6.10.0-light-execution",
+      "proofGenerated": false,
+      "accepted": false,
+      "code": 1,
+      "words": 1,
+      "inputSha256": "bf718b6f653bebc184e1479f1935b8da974d701b893afcf49e701f3e2f9f9c5a",
+      "elfSha256": "9272cfbd5cad27ac6159e5b535a3bcb26dc74c77959faae7de71381e08c88648",
+      "instructions": 4264368
+    },
+    {
+      "case": "oversized-65537",
+      "backend": "sp1-6.10.0-light-execution",
+      "proofGenerated": false,
+      "accepted": false,
+      "code": 2,
+      "words": 0,
+      "inputSha256": "008ffc88d3c96a9f307524eb361e47c5222a887fc45fa0c1fb8d429c5c23b430",
+      "elfSha256": "9272cfbd5cad27ac6159e5b535a3bcb26dc74c77959faae7de71381e08c88648",
+      "instructions": 3895625
+    },
+    {
+      "case": "unicode-nbsp",
+      "backend": "sp1-6.10.0-light-execution",
+      "proofGenerated": false,
+      "accepted": false,
+      "code": 1,
+      "words": 1,
+      "inputSha256": "d153e07702e5e90c726d3829656efc492593cbbeaa61ca3aac4b74ad77cd964a",
+      "elfSha256": "9272cfbd5cad27ac6159e5b535a3bcb26dc74c77959faae7de71381e08c88648",
+      "instructions": 9497
+    },
+    {
+      "case": "changed-elf-pin",
+      "rejectedBeforeExecution": true,
+      "code": "ELF_HASH_MISMATCH"
+    },
+    {
+      "case": "changed-input-pin",
+      "rejectedBeforeExecution": true,
+      "code": "INPUT_HASH_MISMATCH"
+    },
+    {
+      "case": "oversized-host-frame",
+      "rejectedBeforeExecution": true,
+      "code": "INPUT_FRAME_TOO_LARGE"
+    }
+  ]
+}

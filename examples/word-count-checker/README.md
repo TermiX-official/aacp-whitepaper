@@ -4,6 +4,10 @@ A small, dependency-free Rust reference for the word-count example listed in
 the parent README. It implements the contribution guide's stdin, stdout and
 exit-code contract. The counting core is `no_std` and performs no allocation.
 
+An optional [SP1 adapter](zkvm/README.md) compiles this core into a RISC-V
+guest and commits a document-hash-bound public result. The native CLI and its
+tests still have no external dependencies.
+
 ## Acceptance policy
 
 - Input is a UTF-8 document, at most 65,536 bytes.
@@ -39,19 +43,20 @@ input size and enforce wall-clock limits for a stalled input stream.
 
 ## Integration boundaries
 
-This contribution is a **native reference and portable verification core**,
-not a completed SP1/RISC Zero guest or a generated proof. No zkVM execution,
-TEE attestation, on-chain job, or payment is claimed. A guest adapter must
-provide its VM-specific input framing, bounded input handling, and committed
-public outputs; the host must check the program identity and bind the actual
-input to the job's expected deliverable hash. Do not execute the native binary
-as a fallback for a missing zkVM.
+There are two explicit execution paths: the native reference CLI above and
+the SP1 guest/runner under `zkvm/`. The latter executes the RISC-V program
+with SP1's execution-only backend. It generates no cryptographic proof and
+does not establish a TEE attestation, on-chain job, or payment. See the adapter
+guide for input framing, public-output encoding, resource limits and program/
+document hash binding. Do not execute the native binary as a fallback for a
+missing zkVM.
 
 `ZKVM_JOB_DESCRIPTION` and `ZKVM_DELIVERABLE_HASH`, mentioned in the parent
 specification, are deliberately not treated as authenticated facts here.
-The program does not compute or validate a deliverable hash. Pin the verifier
-binary and policy before accepting work; do not let the provider choose the
-verifier after delivery.
+The native CLI does not compute or validate a deliverable hash; the separate
+SP1 runner requires explicit expected hashes and checks the committed input
+hash. Pin the verifier binary and policy before accepting work; do not let the
+provider choose the verifier after delivery.
 
 Meeting a word count does **not** prove accuracy, originality, relevance or
 buyer acceptance. This example is a mechanical criterion suitable for a

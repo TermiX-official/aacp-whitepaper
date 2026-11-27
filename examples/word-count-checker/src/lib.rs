@@ -1,5 +1,7 @@
 #![no_std]
 
+pub mod journal;
+
 /// Policy is compiled into the verifier, not supplied by the deliverable.
 pub const MIN_WORDS: usize = 20;
 pub const MAX_BYTES: usize = 65_536;

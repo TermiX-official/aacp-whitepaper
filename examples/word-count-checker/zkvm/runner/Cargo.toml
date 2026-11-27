@@ -1,0 +1,19 @@
+[package]
+name = "aacp-word-count-sp1-runner"
+version = "0.1.0"
+edition = "2021"
+license = "CC-BY-SA-4.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+aacp-word-count-checker = { path = "../.." }
+sp1-sdk = { version = "=6.10.0", default-features = false, features = ["blocking"] }
+sha2 = "=0.10.9"
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+debug = 0
